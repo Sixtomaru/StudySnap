@@ -104,5 +104,15 @@ export const storageService = {
       console.error("Error obteniendo resultados: ", e);
       return [];
     }
+  },
+
+  // Borrar resultado
+  deleteResult: async (id: string): Promise<void> => {
+    try {
+      await deleteDoc(doc(db, "results", id));
+    } catch (e) {
+      console.error("Error borrando resultado: ", e);
+      throw e;
+    }
   }
 };

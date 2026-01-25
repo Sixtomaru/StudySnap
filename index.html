@@ -42,9 +42,21 @@
   }
 }
 </script>
+<style>
+  /* Deshabilitar selección de texto por defecto */
+  body {
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  /* Habilitar selección solo en inputs y textareas */
+  input, textarea {
+    user-select: text;
+    -webkit-user-select: text;
+  }
+</style>
 <link rel="stylesheet" href="/index.css">
 </head>
-<body class="bg-slate-50 text-slate-900">
+<body class="bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 text-slate-900 min-h-screen selection:bg-brand-200">
   <div id="root"></div>
 <script type="module" src="/index.tsx"></script>
 </body>
