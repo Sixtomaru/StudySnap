@@ -3,16 +3,16 @@ import react from '@vitejs/plugin-react'
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
-  // Carga las variables de entorno desde el archivo .env local
-  // process.cwd() obtiene la carpeta actual
+  // Carga variables desde archivo .env local
   const env = loadEnv(mode, process.cwd(), '');
 
   return {
     plugins: [react()],
     define: {
-      // Esto es CRUCIAL: Busca "process.env.API_KEY" en tu código
-      // y lo sustituye por el valor real de tu archivo .env durante el "npm run build".
-      'process.env.API_KEY': JSON.stringify(env.API_KEY)
+      // INTELIGENTE:
+      // 1. Intenta leer 'env.API_KEY' (Tu archivo .env local)
+      // 2. Si no existe, lee 'process.env.API_KEY' (La configuración de Netlify en la nube)
+      'process.env.API_KEY': JSON.stringify(env.API_KEY || process.env.API_KEY)
     }
   }
 })

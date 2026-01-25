@@ -4,8 +4,10 @@ import { Question } from "../types";
 const generateId = () => Math.random().toString(36).substring(2, 9);
 
 export const parseFileToQuiz = async (base64Data: string, mimeType: string): Promise<Question[]> => {
-  // Comprobación segura de process.env para evitar crash si no está definido
-  const apiKey = (typeof process !== 'undefined' && process.env) ? process.env.API_KEY : null;
+  // CORRECCIÓN CRÍTICA: Acceso directo a process.env.API_KEY
+  // Vite sustituye esta cadena por tu clave real al compilar.
+  // La comprobación anterior (typeof process !== 'undefined') fallaba en navegadores.
+  const apiKey = process.env.API_KEY;
 
   if (!apiKey) {
     throw new Error("Falta la API Key. En Netlify, ve a 'Site Settings > Environment Variables' y añade una variable llamada API_KEY con tu clave de Google.");
@@ -104,7 +106,7 @@ export const parseFileToQuiz = async (base64Data: string, mimeType: string): Pro
   } catch (error: any) {
     console.error("Gemini Error Completo:", error);
     
-    // Convertimos el error a string asegurándonos de capturar todo el detalle (incluyendo propiedades no enumerables si es posible)
+    // Convertimos el error a string asegurándonos de capturar todo el detalle
     const errorStr = JSON.stringify(error, Object.getOwnPropertyNames(error)) + " " + String(error);
 
     // Detección robusta del error de API Key
