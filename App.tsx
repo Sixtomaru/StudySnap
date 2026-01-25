@@ -406,17 +406,29 @@ const EditorPage = ({ user }: { user: User }) => {
     if (missingAnswers) return alert("Todas las preguntas deben tener una respuesta correcta marcada.");
 
     setIsLoading(true);
-    const test: Test = {
-      id: editId || generateId(),
-      userId: user.uid,
-      title,
-      createdAt: Date.now(),
-      questions
-    };
+    
+    try {
+      const test: Test = {
+        id: editId || generateId(),
+        userId: user.uid,
+        title,
+        createdAt: Date.now(),
+        questions
+      };
 
-    await storageService.saveTest(test);
-    setIsLoading(false);
-    navigate('/');
+      await storageService.saveTest(test);
+      navigate('/');
+    } catch (error: any) {
+      console.error("Error al guardar:", error);
+      setIsLoading(false);
+      
+      // Detección específica de error de permisos de Firestore
+      if (error.code === 'permission-denied') {
+        alert("⚠️ ERROR DE PERMISOS FIREBASE\n\nNo tienes permiso para guardar datos.\n\nVe a Firebase Console > Firestore Database > Reglas (Rules) y asegúrate de que permiten escritura.\n\nPrueba pegando esto:\nallow read, write: if request.auth != null;");
+      } else {
+        alert("Error al guardar: " + (error.message || "Error desconocido"));
+      }
+    }
   };
 
   if (isLoading) {

@@ -8,7 +8,6 @@ import {
   getDocs, 
   deleteDoc, 
   query, 
-  orderBy,
   where
 } from 'firebase/firestore';
 
@@ -29,18 +28,18 @@ export const storageService = {
   getTests: async (userId: string): Promise<Test[]> => {
     try {
       if (!userId) return [];
-      // Filtramos por userId
+      // Filtramos por userId sin orderBy para evitar errores de índice "Missing Index" en Firestore
       const q = query(
         collection(db, "tests"), 
-        where("userId", "==", userId),
-        orderBy("createdAt", "desc")
+        where("userId", "==", userId)
       );
       const querySnapshot = await getDocs(q);
       const tests: Test[] = [];
       querySnapshot.forEach((doc) => {
         tests.push(doc.data() as Test);
       });
-      return tests;
+      // Ordenamos en el cliente (JavaScript)
+      return tests.sort((a, b) => b.createdAt - a.createdAt);
     } catch (e) {
       console.error("Error obteniendo tests: ", e);
       return [];
@@ -89,17 +88,18 @@ export const storageService = {
   getResults: async (userId: string): Promise<TestResult[]> => {
     try {
       if (!userId) return [];
+      // Filtramos por userId sin orderBy para evitar errores de índice
       const q = query(
         collection(db, "results"), 
-        where("userId", "==", userId),
-        orderBy("date", "desc")
+        where("userId", "==", userId)
       );
       const querySnapshot = await getDocs(q);
       const results: TestResult[] = [];
       querySnapshot.forEach((doc) => {
         results.push(doc.data() as TestResult);
       });
-      return results;
+      // Ordenamos en el cliente
+      return results.sort((a, b) => b.date - a.date);
     } catch (e) {
       console.error("Error obteniendo resultados: ", e);
       return [];
