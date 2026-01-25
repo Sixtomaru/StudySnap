@@ -106,12 +106,25 @@ export const storageService = {
     }
   },
 
-  // Borrar resultado
+  // Borrar resultado individual
   deleteResult: async (id: string): Promise<void> => {
     try {
       await deleteDoc(doc(db, "results", id));
     } catch (e) {
       console.error("Error borrando resultado: ", e);
+      throw e;
+    }
+  },
+
+  // Borrar TODOS los resultados de un usuario
+  deleteAllResults: async (userId: string): Promise<void> => {
+    try {
+      const q = query(collection(db, "results"), where("userId", "==", userId));
+      const querySnapshot = await getDocs(q);
+      const promises = querySnapshot.docs.map(d => deleteDoc(d.ref));
+      await Promise.all(promises);
+    } catch (e) {
+      console.error("Error borrando todo el historial: ", e);
       throw e;
     }
   }

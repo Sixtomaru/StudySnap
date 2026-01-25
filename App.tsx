@@ -82,25 +82,25 @@ const ListSelectionModal = ({
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md">
-        <h2 className="text-xl font-bold mb-4">¿Dónde guardamos esto?</h2>
+      <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md border-2 border-slate-100">
+        <h2 className="text-xl font-bold mb-4 text-slate-800">¿Dónde guardamos esto?</h2>
         
         {mode === 'existing' && tests.length > 0 ? (
           <div className="space-y-3">
              <p className="text-sm text-slate-500 mb-2">Elige una lista existente:</p>
-             <div className="max-h-60 overflow-y-auto space-y-2">
+             <div className="max-h-60 overflow-y-auto space-y-2 custom-scrollbar">
                {tests.map(t => (
                  <button 
                    key={t.id}
                    onClick={() => onSelect(t.id, t.title)}
-                   className="w-full text-left p-3 rounded-lg border border-slate-200 hover:border-brand-500 hover:bg-brand-50 transition-colors flex justify-between items-center"
+                   className="w-full text-left p-3 rounded-xl border border-slate-200 bg-slate-50 hover:border-brand-500 hover:bg-brand-50 transition-all flex justify-between items-center"
                  >
-                   <span className="font-medium truncate">{t.title}</span>
-                   <span className="text-xs text-slate-400">{t.questions.length} pregs</span>
+                   <span className="font-medium truncate text-slate-700">{t.title}</span>
+                   <span className="text-xs text-slate-400 bg-white px-2 py-1 rounded-md border border-slate-100">{t.questions.length}</span>
                  </button>
                ))}
              </div>
-             <div className="pt-4 border-t mt-2">
+             <div className="pt-4 border-t border-slate-100 mt-2">
                <Button variant="secondary" onClick={() => setMode('new')} className="w-full">
                  + Crear Nueva Lista
                </Button>
@@ -114,6 +114,7 @@ const ListSelectionModal = ({
               placeholder="Ej: Matemáticas T1" 
               value={newTitle}
               onChange={e => setNewTitle(e.target.value)}
+              className="bg-slate-50"
             />
             <div className="flex gap-2">
                {tests.length > 0 && (
@@ -151,8 +152,8 @@ const LoginPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-brand-50 to-indigo-50 flex flex-col items-center justify-center p-6 text-center">
-      <div className="bg-white/80 backdrop-blur p-8 rounded-3xl shadow-xl max-w-sm w-full border border-white">
+    <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center">
+      <div className="bg-white/90 backdrop-blur p-8 rounded-3xl shadow-xl max-w-sm w-full border border-white">
         <div className="bg-gradient-to-r from-brand-500 to-indigo-600 w-20 h-20 rounded-2xl rotate-3 flex items-center justify-center mx-auto mb-6 shadow-lg shadow-brand-500/30">
           <FileText className="text-white" size={40} />
         </div>
@@ -206,13 +207,13 @@ const HomePage = ({ user }: { user: User }) => {
 
   return (
     <div className="space-y-8 pb-24 max-w-7xl mx-auto w-full">
-      <header className="flex justify-between items-center bg-white/60 backdrop-blur-md p-4 rounded-2xl shadow-sm border border-white">
+      <header className="flex justify-between items-center bg-white/80 backdrop-blur-md p-4 rounded-2xl shadow-sm border border-white/50">
         <div className="flex items-center gap-3">
-          <div className="bg-brand-100 p-2 rounded-full hidden sm:block">
+          <div className="bg-brand-100 p-2 rounded-full hidden sm:block border border-brand-200">
             <UserIcon className="text-brand-600" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">Mis Listas</h1>
+            <h1 className="text-2xl font-bold text-slate-800">Mis Listas</h1>
             <p className="text-slate-500 text-sm">Hola, {user.displayName?.split(' ')[0]}</p>
           </div>
         </div>
@@ -230,7 +231,7 @@ const HomePage = ({ user }: { user: User }) => {
           <Loader2 className="animate-spin text-brand-500" size={40} />
         </div>
       ) : tests.length === 0 ? (
-        <div className="text-center py-20 text-slate-400 bg-white/50 rounded-3xl border border-white shadow-sm mx-auto max-w-lg">
+        <div className="text-center py-20 text-slate-400 bg-white/60 rounded-3xl border border-white shadow-sm mx-auto max-w-lg">
           <div className="bg-slate-100 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6">
             <FileText size={40} className="text-slate-300" />
           </div>
@@ -240,10 +241,10 @@ const HomePage = ({ user }: { user: User }) => {
       ) : (
         <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {tests.map(test => (
-            <Card key={test.id} onClick={() => navigate(`/quiz/${test.id}`)} className="relative group hover:ring-2 hover:ring-brand-300 transition-all cursor-pointer h-full flex flex-col justify-between">
+            <Card key={test.id} onClick={() => navigate(`/quiz/${test.id}`)} className="bg-white border-2 border-slate-100 hover:border-brand-200 hover:shadow-md transition-all cursor-pointer h-full flex flex-col justify-between">
               <div>
                 <div className="flex justify-between items-start mb-3">
-                  <div className="bg-brand-50 p-2 rounded-lg text-brand-600">
+                  <div className="bg-brand-50 p-2 rounded-lg text-brand-600 border border-brand-100">
                     <FileText size={20}/>
                   </div>
                   <button onClick={(e) => handleDelete(e, test.id)} className="text-slate-300 hover:text-red-500 p-1.5 hover:bg-red-50 rounded-md transition-colors">
@@ -258,7 +259,7 @@ const HomePage = ({ user }: { user: User }) => {
                  <Button 
                     variant="secondary" 
                     className="flex-1 text-sm py-2"
-                    onClick={(e) => { e.stopPropagation(); navigate(`/editor/${test.id}`); }}
+                    onClick={(e) => { e.stopPropagation(); navigate(`/editor/${test.id}?mode=manual`); }}
                  >
                    Editar
                  </Button>
@@ -281,6 +282,7 @@ const HistoryPage = ({ user }: { user: User }) => {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const navigate = useNavigate();
   const longPressTimer = useRef<any>(null);
+  const isLongPress = useRef(false);
 
   useEffect(() => {
     loadResults();
@@ -293,31 +295,35 @@ const HistoryPage = ({ user }: { user: User }) => {
     setLoading(false);
   };
 
-  const handleLongPress = (id: string) => {
-    setSelectionMode(true);
-    setSelectedIds(new Set([id]));
+  // --- Lógica de Selección Mejorada ---
+  const handlePointerDown = (id: string) => {
+    isLongPress.current = false;
+    longPressTimer.current = setTimeout(() => {
+      isLongPress.current = true;
+      setSelectionMode(true);
+      setSelectedIds(prev => new Set(prev).add(id));
+    }, 600); // 600ms para considerar long press
   };
 
-  const handlePressStart = (id: string) => {
-    longPressTimer.current = setTimeout(() => handleLongPress(id), 600);
-  };
-
-  const handlePressEnd = () => {
+  const handlePointerUp = () => {
     if (longPressTimer.current) clearTimeout(longPressTimer.current);
   };
 
-  const toggleSelection = (id: string) => {
-    const newSet = new Set(selectedIds);
-    if (newSet.has(id)) newSet.delete(id);
-    else newSet.add(id);
-    
-    setSelectedIds(newSet);
-    if (newSet.size === 0) setSelectionMode(false);
-  };
+  const handleClick = (id: string, e: React.MouseEvent) => {
+    // Si fue un long press, no hacemos nada (ya se manejó en el timer)
+    // O si ya estamos en selectionMode, toggleamos
+    if (isLongPress.current) {
+      isLongPress.current = false;
+      return; 
+    }
 
-  const handleClick = (id: string) => {
     if (selectionMode) {
-      toggleSelection(id);
+      const newSet = new Set(selectedIds);
+      if (newSet.has(id)) newSet.delete(id);
+      else newSet.add(id);
+      
+      setSelectedIds(newSet);
+      if (newSet.size === 0) setSelectionMode(false);
     } else {
       navigate(`/history/${id}`);
     }
@@ -325,37 +331,42 @@ const HistoryPage = ({ user }: { user: User }) => {
 
   const handleDeleteSelected = async () => {
     if (!confirm(`¿Eliminar ${selectedIds.size} resultados?`)) return;
-    
     try {
       await Promise.all(Array.from(selectedIds).map(id => storageService.deleteResult(id)));
-      
       const newResults = results.filter(r => !selectedIds.has(r.id));
       setResults(newResults);
       setSelectionMode(false);
       setSelectedIds(new Set());
     } catch (e) {
-      console.error("Error al eliminar:", e);
-      alert("Error al eliminar algunos resultados");
+      alert("Error al eliminar.");
     }
   };
 
   const handleDeleteAll = async () => {
-    if (!confirm("¿Borrar TODO el historial?")) return;
-    setResults([]); // Client side clear.
+    if (!confirm("¿Borrar TODO el historial? Esta acción no se puede deshacer.")) return;
+    try {
+      setLoading(true);
+      await storageService.deleteAllResults(user.uid);
+      setResults([]);
+    } catch(e) {
+      alert("Error borrando el historial.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (loading) return <div className="flex justify-center py-10"><Loader2 className="animate-spin text-brand-500" /></div>;
 
   return (
     <div className="space-y-6 pb-24 max-w-5xl mx-auto">
-      <div className="flex justify-between items-center bg-white/60 backdrop-blur p-4 rounded-2xl">
-         <h1 className="text-2xl font-bold text-slate-900">Historial</h1>
+      <div className="flex justify-between items-center bg-white/80 backdrop-blur p-4 rounded-2xl border border-white/50">
+         <h1 className="text-2xl font-bold text-slate-800">Historial</h1>
          {selectionMode && (
            <div className="flex gap-2">
              <Button variant="danger" onClick={handleDeleteSelected} className="text-sm px-3">
                Borrar ({selectedIds.size})
              </Button>
-             <Button variant="secondary" onClick={() => setSelectionMode(false)} className="text-sm px-3">
+             <Button variant="secondary" onClick={() => { setSelectionMode(false); setSelectedIds(new Set()); }} className="text-sm px-3">
                Cancelar
              </Button>
            </div>
@@ -374,14 +385,13 @@ const HistoryPage = ({ user }: { user: User }) => {
           {results.map(result => (
             <div 
               key={result.id}
-              onMouseDown={() => handlePressStart(result.id)}
-              onMouseUp={handlePressEnd}
-              onTouchStart={() => handlePressStart(result.id)}
-              onTouchEnd={handlePressEnd}
-              onClick={() => handleClick(result.id)}
+              onPointerDown={() => handlePointerDown(result.id)}
+              onPointerUp={handlePointerUp}
+              onPointerLeave={handlePointerUp} // Si sale el dedo/ratón, cancela el timer
+              onClick={(e) => handleClick(result.id, e)}
               className={`
                 bg-white rounded-xl shadow-sm border p-4 cursor-pointer transition-all select-none
-                ${selectionMode && selectedIds.has(result.id) ? 'ring-2 ring-brand-500 bg-brand-50 border-brand-500' : 'border-slate-100 hover:shadow-md'}
+                ${selectionMode && selectedIds.has(result.id) ? 'ring-2 ring-brand-500 bg-brand-50 border-brand-500' : 'border-slate-100 hover:shadow-md hover:border-slate-300'}
               `}
             >
               <div className="flex justify-between items-start">
@@ -424,6 +434,9 @@ const EditorPage = ({ user }: { user: User }) => {
   const [currentQIndex, setCurrentQIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [showListSelector, setShowListSelector] = useState(false);
+  
+  // Ref para controlar si ya hemos intentado abrir la cámara automáticamente
+  const hasTriggeredCamera = useRef(false);
 
   // Inicialización
   useEffect(() => {
@@ -435,6 +448,11 @@ const EditorPage = ({ user }: { user: User }) => {
         if (test && test.userId === user.uid) {
           setTitle(test.title);
           setQuestions(test.questions);
+          // IMPORTANTE: Ir a la última pregunta "nueva" si estamos en modo manual/cámara para añadir más
+          // Si venimos de la home "Editar", quizás queremos ver la primera?
+          // El usuario dijo: "Si elijo una lista que ya tiene preguntas... debería crear una pregunta 11 vacía"
+          // Así que siempre vamos al final si estamos editando.
+          setCurrentQIndex(test.questions.length); 
         } else {
            alert("Error al cargar test.");
            navigate('/');
@@ -443,44 +461,26 @@ const EditorPage = ({ user }: { user: User }) => {
         return;
       }
 
-      // 2. Si venimos de "Nuevo" (Manual o Escáner), pedimos lista primero
-      if (modeParam) {
+      // 2. Si venimos de "Nuevo" (Manual o Escáner) SIN ID, pedimos lista primero
+      if (modeParam && !editId) {
         setShowListSelector(true);
       }
     };
     init();
   }, [editId, modeParam, user]);
 
-  const handleListSelected = async (selectedId: string | null, newTitleText?: string) => {
-    setShowListSelector(false);
-    
-    if (selectedId) {
-      // Cargar test existente para añadirle cosas
-      setIsLoading(true);
-      const test = await storageService.getTestById(selectedId);
-      if (test) {
-        setTitle(test.title);
-        setQuestions(test.questions);
-        // Vamos al final de las preguntas
-        setCurrentQIndex(test.questions.length); // Esto creará una nueva vacía si es manual
-      }
-      setIsLoading(false);
-      
-      // Si era cámara, activamos input file ahora
-      if (modeParam === 'camera') {
-        document.getElementById('file-upload-trigger')?.click();
-      }
-    } else if (newTitleText) {
-      // Nueva lista
-      setTitle(newTitleText);
-      setQuestions([]);
-      setCurrentQIndex(0);
-      
-      if (modeParam === 'camera') {
-        document.getElementById('file-upload-trigger')?.click();
-      }
+  // Efecto para abrir cámara automáticamente si es mode=camera
+  useEffect(() => {
+    if (modeParam === 'camera' && !showListSelector && !isLoading && !hasTriggeredCamera.current) {
+        // Intentamos hacer click en el input file
+        const fileInput = document.getElementById('file-upload-trigger');
+        if (fileInput) {
+            hasTriggeredCamera.current = true;
+            fileInput.click();
+        }
     }
-  };
+  }, [modeParam, showListSelector, isLoading]);
+
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -494,7 +494,7 @@ const EditorPage = ({ user }: { user: User }) => {
         const extractedQuestions = await parseFileToQuiz(base64String, file.type);
         setQuestions(prev => [...prev, ...extractedQuestions]);
         // Ir a la primera pregunta nueva
-        setCurrentQIndex(questions.length); 
+        setCurrentQIndex(prev => questions.length); 
       } catch (err: any) {
         alert(err.message);
       } finally {
@@ -545,13 +545,8 @@ const EditorPage = ({ user }: { user: User }) => {
     if (direction === 'prev') {
       if (currentQIndex > 0) setCurrentQIndex(prev => prev - 1);
     } else {
-      // Validar antes de pasar? Opcional.
-      // Permitimos ir a una "nueva" (length)
       if (currentQIndex < questions.length) setCurrentQIndex(prev => prev + 1);
       else {
-        // Ya estamos en la "nueva", quizás crear otra? 
-        // La lógica actual ya crea una nueva visualmente si currentQIndex == length.
-        // Solo necesitamos avanzar si NO estamos en una vacía.
         const current = getCurrentQuestion();
         if(current.text.trim()) setCurrentQIndex(prev => prev + 1);
       }
@@ -559,8 +554,7 @@ const EditorPage = ({ user }: { user: User }) => {
   };
 
   const handleSave = async () => {
-    if (!title.trim()) return alert("Escribe un título para la lista de tests.");
-    // Filtramos preguntas vacías
+    if (!title.trim()) return alert("Escribe un título para la lista.");
     const validQuestions = questions.filter(q => q.text.trim() !== '');
     if (validQuestions.length === 0) return alert("Añade al menos una pregunta.");
     
@@ -571,64 +565,41 @@ const EditorPage = ({ user }: { user: User }) => {
     
     try {
       const test: Test = {
-        id: editId || (modeParam ? undefined : generateId()) || generateId(), // Reutilizar ID si estamos editando
-        // Si venimos de seleccionar lista existente, deberíamos tener su ID.
-        // Aquí hay un pequeño bug lógico: si seleccionamos lista existente, 'editId' de la URL no cambia,
-        // pero necesitamos guardar SOBRE esa ID. 
-        // Solución simple: Si 'questions' ya tiene IDs, no importa, pero la ID del TEST es clave.
-        // En esta implementación simple, si seleccionaste "Lista existente", cargamos los datos en 'questions' y 'title'.
-        // Pero necesitamos la ID original. 
-        // MEJORA: Cuando seleccionas lista, deberíamos navegar a /editor/:id
+        id: editId || generateId(), // Usar ID existente si editamos
         userId: user.uid,
         title,
         createdAt: Date.now(),
         questions: validQuestions
       };
 
-      // Si seleccionamos una lista existente en el modal, no navegamos, solo cargamos estado.
-      // Necesitamos guardar la ID de esa lista.
-      // Para simplificar: En el modal, al seleccionar, navegamos a /editor/ID y recargamos.
-      // O guardamos la ID en un state 'targetTestId'.
-      
-      // Como ya tengo lógica compleja, asumiré que si hay preguntas cargadas es update.
-      // Pero para asegurar consistencia, si modeParam existe y elegimos lista existente,
-      // la mejor UX es navegar a la ruta de edición de esa lista.
-      // Voy a modificar `handleListSelected` para navegar.
-      
-      // Como fallback aquí:
-      await storageService.saveTest(test); // Ojo: si la ID cambia se duplica. 
-      // Si estamos en /editor?mode=... y elegimos lista existente, necesitamos saber su ID.
-      // Asumiremos que el usuario navega en el modal.
-
+      await storageService.saveTest(test); 
       navigate('/');
     } catch (error: any) {
-      if (error.code === 'permission-denied') {
-         alert("Error de permisos en Firebase. Revisa las reglas.");
-      } else {
-         alert("Error al guardar: " + error.message);
-      }
-      setIsLoading(false);
+       alert("Error al guardar: " + error.message);
+       setIsLoading(false);
     }
   };
 
-  // Re-implementación de navegación en modal
+  // Cuando se selecciona una lista en el modal
   const onListSelectFinal = (id: string | null, newTitle?: string) => {
     if (id) {
-       // Navegar a modo edición de esa lista
-       // Pasamos state extra para indicar que queremos abrir escáner/manual si fuese necesario?
-       // Simplificación: Navegar a /editor/ID y si era cámara, el usuario pulsa cámara de nuevo dentro.
-       // O mantenemos estado local. Mantenemos estado local es más fluido.
-       
-       // Hack para mantener la ID correcta al guardar:
+       // Navegar a modo edición de esa lista, manteniendo el modo
        navigate(`/editor/${id}?mode=${modeParam}`, { replace: true });
-       // El useEffect de arriba cargará los datos.
        setShowListSelector(false);
     } else if (newTitle) {
+      // Nuevo test
       setTitle(newTitle);
       setQuestions([]);
       setCurrentQIndex(0);
       setShowListSelector(false);
-      // Es un test nuevo, generamos ID al guardar
+      // No navegamos a /id porque aun no tiene, se generará al guardar.
+      // Pero si es cámara, tenemos que activar el trigger manualmente porque el useEffect
+      // solo salta al cambiar modeParam.
+      if (modeParam === 'camera') {
+         setTimeout(() => {
+             document.getElementById('file-upload-trigger')?.click();
+         }, 100);
+      }
     }
   };
 
@@ -663,7 +634,7 @@ const EditorPage = ({ user }: { user: User }) => {
         onChange={handleFileUpload} 
       />
 
-      <header className="sticky top-0 bg-white/90 backdrop-blur z-20 py-4 border-b border-slate-100 mb-6 flex justify-between items-center px-4 -mx-4 shadow-sm">
+      <header className="sticky top-0 bg-white/90 backdrop-blur z-20 py-4 border-b border-slate-200 mb-6 flex justify-between items-center px-4 -mx-4 shadow-sm">
         <div className="flex items-center gap-2">
            <button onClick={() => navigate('/')} className="p-2 hover:bg-slate-100 rounded-full"><ArrowLeft /></button>
            <div className="flex flex-col">
@@ -672,22 +643,29 @@ const EditorPage = ({ user }: { user: User }) => {
                 value={title}
                 onChange={e => setTitle(e.target.value)}
                 placeholder="Título de la lista..."
-                className="font-bold text-slate-800 bg-transparent focus:outline-none focus:border-b-2 border-brand-500 w-48 sm:w-auto"
+                className="font-bold text-slate-800 bg-transparent focus:outline-none focus:border-b-2 border-brand-500 w-48 sm:w-auto placeholder:text-slate-300"
              />
            </div>
         </div>
-        <div className="flex flex-col items-center">
-            <span className="text-[10px] font-bold text-brand-600 uppercase tracking-wider mb-1">Guardar</span>
-            <Button onClick={handleSave} className="w-12 h-12 rounded-full p-0 flex items-center justify-center shadow-lg shadow-brand-200">
-              <Save size={20} />
+        <div className="flex gap-2">
+            {/* Botón extra para abrir cámara si estamos editando y queremos añadir más */}
+            <Button variant="secondary" onClick={() => document.getElementById('file-upload-trigger')?.click()} className="p-2 h-12 w-12 rounded-full flex items-center justify-center border-slate-200 shadow-sm">
+               <Camera size={20} className="text-slate-600"/>
             </Button>
+            
+            <div className="flex flex-col items-center">
+                <span className="text-[10px] font-bold text-brand-600 uppercase tracking-wider mb-1">Guardar</span>
+                <Button onClick={handleSave} className="w-12 h-12 rounded-full p-0 flex items-center justify-center shadow-lg shadow-brand-200 bg-brand-600 hover:bg-brand-700">
+                  <Save size={20} />
+                </Button>
+            </div>
         </div>
       </header>
 
       <div className="space-y-6">
         
         {/* Navegación de Preguntas */}
-        <div className="flex justify-between items-center bg-white p-2 rounded-xl shadow-sm border border-slate-100 mb-4">
+        <div className="flex justify-between items-center bg-white p-2 rounded-xl shadow-sm border border-slate-200 mb-4">
            <Button variant="ghost" onClick={() => navigateQuestion('prev')} disabled={currentQIndex === 0}>
              <ChevronLeft /> Anterior
            </Button>
@@ -700,14 +678,14 @@ const EditorPage = ({ user }: { user: User }) => {
         </div>
 
         {/* Tarjeta de Edición */}
-        <div className="bg-white rounded-2xl shadow-lg border border-slate-100 p-6 relative min-h-[400px]">
+        <div className="bg-white rounded-2xl shadow-md border border-slate-200 p-6 relative min-h-[400px]">
             <div className="mb-6">
               <label className="block text-xs uppercase text-slate-400 font-bold mb-2">Pregunta</label>
               <TextArea 
                 value={activeQ.text} 
                 onChange={e => updateCurrentQuestion('text', e.target.value)} 
                 placeholder="Escribe la pregunta aquí..."
-                className="text-lg bg-slate-50 border-slate-200 min-h-[100px]"
+                className="text-lg bg-slate-50 border-slate-200 min-h-[100px] focus:bg-white transition-colors"
               />
             </div>
 
@@ -717,7 +695,7 @@ const EditorPage = ({ user }: { user: User }) => {
                 <div key={opt.id} className="flex items-center gap-3 group">
                   <button 
                     onClick={() => setCorrectOption(opt.id)}
-                    className={`flex-shrink-0 w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all ${activeQ.correctOptionId === opt.id ? 'border-green-500 bg-green-500 text-white shadow-md shadow-green-200' : 'border-slate-300 text-transparent hover:border-slate-400'}`}
+                    className={`flex-shrink-0 w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all ${activeQ.correctOptionId === opt.id ? 'border-green-500 bg-green-500 text-white shadow-md shadow-green-200' : 'border-slate-300 bg-white text-transparent hover:border-slate-400'}`}
                   >
                     <CheckCircle size={18} fill="currentColor" className={activeQ.correctOptionId === opt.id ? 'text-white' : ''} />
                   </button>
@@ -729,7 +707,7 @@ const EditorPage = ({ user }: { user: User }) => {
                       value={opt.text} 
                       onChange={e => updateOption(oIndex, e.target.value)} 
                       placeholder={`Opción ${oIndex + 1}`}
-                      className="pl-8 py-3 bg-slate-50 border-slate-200 focus:bg-white transition-colors"
+                      className="pl-8 py-3 bg-slate-50 border-slate-200 focus:bg-white transition-colors shadow-sm"
                     />
                   </div>
                   <button 
@@ -795,9 +773,7 @@ const QuizPage = ({ user }: { user: User }) => {
       const loadedTest = await storageService.getTestById(id || '');
       if (loadedTest) {
         setTest(loadedTest);
-        // Shuffle questions
         const shuffled = [...loadedTest.questions].sort(() => Math.random() - 0.5);
-        // Shuffle options but keep ID reference
         const fullyShuffled = shuffled.map(q => ({
           ...q,
           options: [...q.options].sort(() => Math.random() - 0.5)
@@ -860,7 +836,6 @@ const QuizPage = ({ user }: { user: User }) => {
   if (questions.length === 0) return <div>Este test no tiene preguntas.</div>;
 
   const currentQ = questions[currentIndex];
-  // Las etiquetas siempre fijas A, B, C, D independientemente del orden real de las opciones
   const labels = ['A', 'B', 'C', 'D', 'E', 'F']; 
 
   return (
@@ -873,8 +848,9 @@ const QuizPage = ({ user }: { user: User }) => {
         <button onClick={finishQuiz} className="text-brand-600 font-bold text-sm hover:underline">Terminar</button>
       </header>
 
-      <div className="flex-1 overflow-y-auto custom-scrollbar p-1">
-        <Card className="mb-6 border-l-4 border-l-brand-500 shadow-lg">
+      {/* Aplicar scrollbar-hide aquí */}
+      <div className="flex-1 overflow-y-auto scrollbar-hide p-1">
+        <Card className="mb-6 border-l-4 border-l-brand-500 shadow-lg bg-white">
            <h2 className="text-xl md:text-2xl font-bold text-slate-800 leading-relaxed">{currentQ.text}</h2>
         </Card>
 
@@ -953,10 +929,10 @@ const ResultViewPage = ({ user }: { user: User }) => {
          <h1 className="font-bold text-xl">Resumen</h1>
        </header>
 
-       <Card className="text-center py-10 mb-8 bg-gradient-to-br from-brand-500 to-indigo-600 text-white border-none shadow-xl shadow-brand-500/20">
+       <Card className="text-center py-10 mb-8 bg-gradient-to-br from-brand-600 to-brand-700 text-white border-none shadow-xl shadow-brand-500/20">
           <h2 className="text-brand-100 font-medium mb-4 text-lg">{result.testTitle}</h2>
           <div className="text-7xl font-bold mb-4 tracking-tighter">{percentage}%</div>
-          <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur px-4 py-2 rounded-full">
+          <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur px-4 py-2 rounded-full border border-white/10">
             <CheckCircle size={16} className="text-green-300"/> 
             <span className="font-medium">{result.score} aciertos</span>
             <span className="opacity-50 mx-1">|</span>
@@ -1006,37 +982,40 @@ const ResultViewPage = ({ user }: { user: User }) => {
 const FabMenu = ({ onAction }: { onAction: (action: 'manual' | 'camera') => void }) => {
   const [isOpen, setIsOpen] = useState(false);
 
+  // Clases para animación de botones hijos: salen desde la posición del botón padre
+  const btnCommon = "absolute left-1/2 -translate-x-1/2 w-12 h-12 rounded-full shadow-lg flex items-center justify-center border border-slate-200 transition-all duration-300 ease-out";
+  
+  // Posiciones: 
+  // Manual: arriba a la izquierda (-50px, -60px) -> Simplificaremos a Vertical para que sea "detrás" como pediste
+  // El usuario pidió: "desplazarse a su posición". Vamos a hacer que salgan verticalmente hacia arriba.
+  
   return (
-    <div className="relative -top-6">
-       {isOpen && (
-         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-4 flex gap-4 animate-in slide-in-from-bottom-4 fade-in">
-           <button 
-             onClick={() => { setIsOpen(false); onAction('manual'); }}
-             className="flex flex-col items-center gap-2 group"
-           >
-             <div className="w-12 h-12 bg-white text-slate-700 rounded-full shadow-lg flex items-center justify-center border border-slate-100 group-hover:bg-brand-50 group-hover:text-brand-600 transition-colors">
-               <PenTool size={20} />
-             </div>
-             <span className="text-xs font-bold text-slate-600 bg-white/80 px-2 rounded backdrop-blur">Manual</span>
-           </button>
-
-           <button 
-             onClick={() => { setIsOpen(false); onAction('camera'); }}
-             className="flex flex-col items-center gap-2 group"
-           >
-             <div className="w-12 h-12 bg-white text-slate-700 rounded-full shadow-lg flex items-center justify-center border border-slate-100 group-hover:bg-brand-50 group-hover:text-brand-600 transition-colors">
-               <Camera size={20} />
-             </div>
-             <span className="text-xs font-bold text-slate-600 bg-white/80 px-2 rounded backdrop-blur">Escanear</span>
-           </button>
-         </div>
-       )}
+    <div className="relative -top-6 h-16 w-16 flex justify-center items-center">
        
+       {/* Botón Manual */}
+       <button 
+         onClick={() => { setIsOpen(false); onAction('manual'); }}
+         className={`${btnCommon} ${isOpen ? '-translate-y-[85px] opacity-100' : 'translate-y-0 opacity-0 pointer-events-none'} bg-white text-slate-700 hover:bg-brand-50 hover:text-brand-600 z-0`}
+       >
+         <PenTool size={20} />
+         <span className={`absolute top-full mt-1 bg-white/80 backdrop-blur px-2 rounded text-[10px] font-bold text-slate-600 transition-opacity duration-300 ${isOpen ? 'opacity-100' : 'opacity-0'}`}>Manual</span>
+       </button>
+
+       {/* Botón Escanear */}
+       <button 
+         onClick={() => { setIsOpen(false); onAction('camera'); }}
+         className={`${btnCommon} ${isOpen ? '-translate-y-[150px] opacity-100' : 'translate-y-0 opacity-0 pointer-events-none'} bg-white text-slate-700 hover:bg-brand-50 hover:text-brand-600 z-0`}
+       >
+         <Camera size={20} />
+         <span className={`absolute top-full mt-1 bg-white/80 backdrop-blur px-2 rounded text-[10px] font-bold text-slate-600 transition-opacity duration-300 ${isOpen ? 'opacity-100' : 'opacity-0'}`}>Escanear</span>
+       </button>
+
+       {/* Botón Principal (+) */}
        <button 
          onClick={() => setIsOpen(!isOpen)} 
          className={`
-           w-16 h-16 rounded-full shadow-xl flex items-center justify-center transition-all duration-300
-           ${isOpen ? 'bg-slate-800 rotate-45' : 'bg-brand-600 hover:scale-105 hover:bg-brand-700'}
+           relative z-10 w-16 h-16 rounded-full shadow-xl flex items-center justify-center transition-all duration-300
+           ${isOpen ? 'bg-slate-800 rotate-45 scale-90' : 'bg-brand-600 hover:scale-105 hover:bg-brand-700'}
            text-white
          `}
        >
@@ -1045,7 +1024,7 @@ const FabMenu = ({ onAction }: { onAction: (action: 'manual' | 'camera') => void
        
        {/* Overlay para cerrar al hacer click fuera */}
        {isOpen && (
-         <div className="fixed inset-0 z-[-1]" onClick={() => setIsOpen(false)}></div>
+         <div className="fixed inset-0 z-[-1] bg-black/10 backdrop-blur-[1px]" onClick={() => setIsOpen(false)}></div>
        )}
     </div>
   );

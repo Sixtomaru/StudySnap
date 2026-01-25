@@ -11,12 +11,18 @@
         extend: {
           colors: {
             brand: {
-              50: '#eff6ff',
-              100: '#dbeafe',
-              500: '#3b82f6',
-              600: '#2563eb',
-              700: '#1d4ed8',
-              900: '#1e3a8a',
+              50: '#f0f4ff', // Mas plano
+              100: '#e0e7ff',
+              200: '#c7d2fe',
+              300: '#a5b4fc',
+              500: '#6366f1', // Indigo más sólido
+              600: '#4f46e5',
+              700: '#4338ca',
+            },
+            pastel: {
+              bg: '#eef2f6', // Fondo general grisáceo/azulado plano
+              card: '#ffffff',
+              input: '#f8fafc'
             }
           }
         }
@@ -53,10 +59,19 @@
     user-select: text;
     -webkit-user-select: text;
   }
+  
+  /* Ocultar Scrollbar pero permitir scroll */
+  .scrollbar-hide::-webkit-scrollbar {
+      display: none;
+  }
+  .scrollbar-hide {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+  }
 </style>
 <link rel="stylesheet" href="/index.css">
 </head>
-<body class="bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 text-slate-900 min-h-screen selection:bg-brand-200">
+<body class="bg-gradient-to-br from-blue-100 via-indigo-100 to-purple-100 text-slate-800 min-h-screen selection:bg-brand-200">
   <div id="root"></div>
 <script type="module" src="/index.tsx"></script>
 </body>
