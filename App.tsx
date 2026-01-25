@@ -23,7 +23,10 @@ import {
   ExternalLink,
   CheckSquare,
   Square,
-  X
+  X,
+  Settings,
+  Moon,
+  Sun
 } from 'lucide-react';
 import { signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { auth, googleProvider } from './services/firebaseConfig';
@@ -49,6 +52,25 @@ const useAuth = () => {
   }, []);
 
   return { user, loading };
+};
+
+// --- Dark Mode Context ---
+const useDarkMode = () => {
+  const [isDark, setIsDark] = useState(() => {
+    return localStorage.getItem('theme') === 'dark';
+  });
+
+  useEffect(() => {
+    if (isDark) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    }
+  }, [isDark]);
+
+  return { isDark, toggle: () => setIsDark(prev => !prev) };
 };
 
 // --- Components ---
@@ -82,39 +104,39 @@ const ListSelectionModal = ({
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md border-2 border-slate-100">
-        <h2 className="text-xl font-bold mb-4 text-slate-800">¿Dónde guardamos esto?</h2>
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl p-6 w-full max-w-md border-2 border-slate-100 dark:border-slate-700">
+        <h2 className="text-xl font-bold mb-4 text-slate-800 dark:text-white">¿Dónde guardamos esto?</h2>
         
         {mode === 'existing' && tests.length > 0 ? (
           <div className="space-y-3">
-             <p className="text-sm text-slate-500 mb-2">Elige una lista existente:</p>
+             <p className="text-sm text-slate-500 dark:text-slate-400 mb-2">Elige una lista existente:</p>
              <div className="max-h-60 overflow-y-auto space-y-2 custom-scrollbar">
                {tests.map(t => (
                  <button 
                    key={t.id}
                    onClick={() => onSelect(t.id, t.title)}
-                   className="w-full text-left p-3 rounded-xl border border-slate-200 bg-slate-50 hover:border-brand-500 hover:bg-brand-50 transition-all flex justify-between items-center"
+                   className="w-full text-left p-3 rounded-xl border border-slate-200 bg-slate-50 hover:border-brand-500 hover:bg-brand-50 dark:bg-slate-700 dark:border-slate-600 dark:hover:border-brand-500 dark:text-slate-200 transition-all flex justify-between items-center"
                  >
-                   <span className="font-medium truncate text-slate-700">{t.title}</span>
-                   <span className="text-xs text-slate-400 bg-white px-2 py-1 rounded-md border border-slate-100">{t.questions.length}</span>
+                   <span className="font-medium truncate">{t.title}</span>
+                   <span className="text-xs text-slate-400 bg-white dark:bg-slate-800 px-2 py-1 rounded-md border border-slate-100 dark:border-slate-600">{t.questions.length}</span>
                  </button>
                ))}
              </div>
-             <div className="pt-4 border-t border-slate-100 mt-2">
-               <Button variant="secondary" onClick={() => setMode('new')} className="w-full">
+             <div className="pt-4 border-t border-slate-100 dark:border-slate-700 mt-2">
+               <Button variant="secondary" onClick={() => setMode('new')} className="w-full dark:bg-slate-700 dark:text-white dark:border-slate-600">
                  + Crear Nueva Lista
                </Button>
              </div>
           </div>
         ) : (
           <div className="space-y-4">
-            <p className="text-sm text-slate-500">Crear una lista nueva:</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Crear una lista nueva:</p>
             <Input 
               autoFocus
               placeholder="Ej: Matemáticas T1" 
               value={newTitle}
               onChange={e => setNewTitle(e.target.value)}
-              className="bg-slate-50"
+              className="bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white"
             />
             <div className="flex gap-2">
                {tests.length > 0 && (
@@ -130,13 +152,50 @@ const ListSelectionModal = ({
             </div>
           </div>
         )}
-        <button onClick={onCancel} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><XCircle /></button>
+        <button onClick={onCancel} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 dark:hover:text-white"><XCircle /></button>
       </div>
     </div>
   );
 };
 
 // --- Pages ---
+
+const SettingsPage = () => {
+  const { isDark, toggle } = useDarkMode();
+  const navigate = useNavigate();
+
+  return (
+    <div className="pb-24 max-w-lg mx-auto p-4">
+      <header className="flex items-center gap-2 mb-8">
+         <button onClick={() => navigate('/')} className="p-2 hover:bg-white/50 rounded-full text-slate-700 dark:text-slate-300"><ArrowLeft /></button>
+         <h1 className="font-bold text-2xl text-slate-800 dark:text-white">Opciones</h1>
+      </header>
+
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
+        <div className="p-4 flex items-center justify-between border-b border-slate-100 dark:border-slate-700">
+           <div className="flex items-center gap-3">
+             <div className="bg-brand-50 dark:bg-slate-700 p-2 rounded-lg text-brand-600 dark:text-brand-400">
+               {isDark ? <Moon size={24} /> : <Sun size={24} />}
+             </div>
+             <div>
+               <h3 className="font-medium text-slate-800 dark:text-white">Modo Oscuro</h3>
+               <p className="text-xs text-slate-500 dark:text-slate-400">Cambiar la apariencia de la aplicación</p>
+             </div>
+           </div>
+           
+           <button 
+             onClick={toggle}
+             className={`w-14 h-8 rounded-full p-1 transition-colors duration-300 ease-in-out ${isDark ? 'bg-brand-600' : 'bg-slate-200'}`}
+           >
+             <div className={`bg-white w-6 h-6 rounded-full shadow-sm transform transition-transform duration-300 ${isDark ? 'translate-x-6' : 'translate-x-0'}`} />
+           </button>
+        </div>
+      </div>
+      
+      <p className="text-center text-slate-400 text-xs mt-8">StudySnap v1.0</p>
+    </div>
+  );
+};
 
 const LoginPage = () => {
   const [errorMessage, setErrorMessage] = useState('');
@@ -153,12 +212,12 @@ const LoginPage = () => {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center">
-      <div className="bg-white/90 backdrop-blur p-8 rounded-3xl shadow-xl max-w-sm w-full border border-white">
+      <div className="bg-white/90 dark:bg-slate-800/90 backdrop-blur p-8 rounded-3xl shadow-xl max-w-sm w-full border border-white dark:border-slate-700">
         <div className="bg-gradient-to-r from-brand-500 to-indigo-600 w-20 h-20 rounded-2xl rotate-3 flex items-center justify-center mx-auto mb-6 shadow-lg shadow-brand-500/30">
           <FileText className="text-white" size={40} />
         </div>
-        <h1 className="text-3xl font-bold text-slate-900 mb-2 tracking-tight">StudySnap</h1>
-        <p className="text-slate-500 mb-8 leading-relaxed">Escanea, crea y repasa tus tests en cualquier lugar y dispositivo.</p>
+        <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2 tracking-tight">StudySnap</h1>
+        <p className="text-slate-500 dark:text-slate-400 mb-8 leading-relaxed">Escanea, crea y repasa tus tests en cualquier lugar.</p>
         
         <Button 
           variant="primary"
@@ -207,23 +266,32 @@ const HomePage = ({ user }: { user: User }) => {
 
   return (
     <div className="space-y-8 pb-24 max-w-7xl mx-auto w-full">
-      <header className="flex justify-between items-center bg-white/80 backdrop-blur-md p-4 rounded-2xl shadow-sm border border-white/50">
+      <header className="flex justify-between items-center bg-white/80 dark:bg-slate-800/80 backdrop-blur-md p-4 rounded-2xl shadow-sm border border-white/50 dark:border-slate-700">
         <div className="flex items-center gap-3">
-          <div className="bg-brand-100 p-2 rounded-full hidden sm:block border border-brand-200">
-            <UserIcon className="text-brand-600" />
+          <div className="bg-brand-100 dark:bg-slate-700 p-2 rounded-full hidden sm:block border border-brand-200 dark:border-slate-600">
+            <UserIcon className="text-brand-600 dark:text-brand-400" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-slate-800">Mis Listas</h1>
-            <p className="text-slate-500 text-sm">Hola, {user.displayName?.split(' ')[0]}</p>
+            <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Mis Listas</h1>
+            <p className="text-slate-500 dark:text-slate-400 text-sm">Hola, {user.displayName?.split(' ')[0]}</p>
           </div>
         </div>
-        <button 
-          onClick={handleLogout}
-          className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors" 
-          title="Cerrar sesión"
-        >
-          <LogOut size={24} />
-        </button>
+        
+        <div className="flex gap-2">
+           <button 
+             onClick={() => navigate('/settings')}
+             className="p-2 text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 rounded-full transition-colors"
+           >
+             <Settings size={24} />
+           </button>
+           <button 
+             onClick={handleLogout}
+             className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:text-slate-500 dark:hover:bg-slate-700 rounded-full transition-colors" 
+             title="Cerrar sesión"
+           >
+             <LogOut size={24} />
+           </button>
+        </div>
       </header>
 
       {loading ? (
@@ -231,39 +299,39 @@ const HomePage = ({ user }: { user: User }) => {
           <Loader2 className="animate-spin text-brand-500" size={40} />
         </div>
       ) : tests.length === 0 ? (
-        <div className="text-center py-20 text-slate-400 bg-white/60 rounded-3xl border border-white shadow-sm mx-auto max-w-lg">
-          <div className="bg-slate-100 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6">
-            <FileText size={40} className="text-slate-300" />
+        <div className="text-center py-20 text-slate-400 bg-white/60 dark:bg-slate-800/60 rounded-3xl border border-white dark:border-slate-700 shadow-sm mx-auto max-w-lg">
+          <div className="bg-slate-100 dark:bg-slate-700 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6">
+            <FileText size={40} className="text-slate-300 dark:text-slate-500" />
           </div>
-          <h2 className="text-xl font-semibold text-slate-600 mb-2">No tienes listas guardadas</h2>
-          <p className="text-slate-500">Pulsa el botón + para empezar.</p>
+          <h2 className="text-xl font-semibold text-slate-600 dark:text-slate-300 mb-2">No tienes listas guardadas</h2>
+          <p className="text-slate-500 dark:text-slate-400">Pulsa el botón + para empezar.</p>
         </div>
       ) : (
         <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {tests.map(test => (
-            <Card key={test.id} onClick={() => navigate(`/quiz/${test.id}`)} className="bg-white border-2 border-slate-100 hover:border-brand-200 hover:shadow-md transition-all cursor-pointer h-full flex flex-col justify-between">
+            <Card key={test.id} onClick={() => navigate(`/quiz/${test.id}`)} className="bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 hover:border-brand-200 dark:hover:border-brand-700 hover:shadow-md transition-all cursor-pointer h-full flex flex-col justify-between">
               <div>
                 <div className="flex justify-between items-start mb-3">
-                  <div className="bg-brand-50 p-2 rounded-lg text-brand-600 border border-brand-100">
+                  <div className="bg-brand-50 dark:bg-slate-700 p-2 rounded-lg text-brand-600 dark:text-brand-400 border border-brand-100 dark:border-slate-600">
                     <FileText size={20}/>
                   </div>
-                  <button onClick={(e) => handleDelete(e, test.id)} className="text-slate-300 hover:text-red-500 p-1.5 hover:bg-red-50 rounded-md transition-colors">
+                  <button onClick={(e) => handleDelete(e, test.id)} className="text-slate-300 hover:text-red-500 p-1.5 hover:bg-red-50 dark:hover:bg-slate-700 rounded-md transition-colors">
                     <Trash2 size={18} />
                   </button>
                 </div>
-                <h3 className="font-bold text-lg text-slate-800 line-clamp-2 mb-1">{test.title}</h3>
-                <div className="text-sm text-slate-500 mb-4">{test.questions.length} preguntas</div>
+                <h3 className="font-bold text-lg text-slate-800 dark:text-slate-100 line-clamp-2 mb-1">{test.title}</h3>
+                <div className="text-sm text-slate-500 dark:text-slate-400 mb-4">{test.questions.length} preguntas</div>
               </div>
               
-              <div className="flex gap-2 mt-auto pt-4 border-t border-slate-100">
+              <div className="flex gap-2 mt-auto pt-4 border-t border-slate-100 dark:border-slate-700">
                  <Button 
                     variant="secondary" 
-                    className="flex-1 text-sm py-2"
+                    className="flex-1 text-sm py-2 dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600"
                     onClick={(e) => { e.stopPropagation(); navigate(`/editor/${test.id}?mode=manual`); }}
                  >
                    Editar
                  </Button>
-                 <Button variant="primary" className="flex-1 text-sm py-2 flex justify-center items-center gap-1 shadow-md shadow-brand-200">
+                 <Button variant="primary" className="flex-1 text-sm py-2 flex justify-center items-center gap-1 shadow-md shadow-brand-200 dark:shadow-none">
                    <Play size={16} /> Jugar
                  </Button>
               </div>
@@ -295,14 +363,13 @@ const HistoryPage = ({ user }: { user: User }) => {
     setLoading(false);
   };
 
-  // --- Lógica de Selección Mejorada ---
   const handlePointerDown = (id: string) => {
     isLongPress.current = false;
     longPressTimer.current = setTimeout(() => {
       isLongPress.current = true;
       setSelectionMode(true);
       setSelectedIds(prev => new Set(prev).add(id));
-    }, 600); // 600ms para considerar long press
+    }, 600); 
   };
 
   const handlePointerUp = () => {
@@ -310,8 +377,6 @@ const HistoryPage = ({ user }: { user: User }) => {
   };
 
   const handleClick = (id: string, e: React.MouseEvent) => {
-    // Si fue un long press, no hacemos nada (ya se manejó en el timer)
-    // O si ya estamos en selectionMode, toggleamos
     if (isLongPress.current) {
       isLongPress.current = false;
       return; 
@@ -359,27 +424,27 @@ const HistoryPage = ({ user }: { user: User }) => {
 
   return (
     <div className="space-y-6 pb-24 max-w-5xl mx-auto">
-      <div className="flex justify-between items-center bg-white/80 backdrop-blur p-4 rounded-2xl border border-white/50">
-         <h1 className="text-2xl font-bold text-slate-800">Historial</h1>
+      <div className="flex justify-between items-center bg-white/80 dark:bg-slate-800/80 backdrop-blur p-4 rounded-2xl border border-white/50 dark:border-slate-700">
+         <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Historial</h1>
          {selectionMode && (
            <div className="flex gap-2">
              <Button variant="danger" onClick={handleDeleteSelected} className="text-sm px-3">
                Borrar ({selectedIds.size})
              </Button>
-             <Button variant="secondary" onClick={() => { setSelectionMode(false); setSelectedIds(new Set()); }} className="text-sm px-3">
+             <Button variant="secondary" onClick={() => { setSelectionMode(false); setSelectedIds(new Set()); }} className="text-sm px-3 dark:bg-slate-700 dark:text-white">
                Cancelar
              </Button>
            </div>
          )}
          {!selectionMode && results.length > 0 && (
-            <Button variant="ghost" onClick={handleDeleteAll} className="text-red-500 hover:bg-red-50">
+            <Button variant="ghost" onClick={handleDeleteAll} className="text-red-500 hover:bg-red-50 dark:hover:bg-slate-700">
               Borrar Todo
             </Button>
          )}
       </div>
       
       {results.length === 0 ? (
-        <p className="text-slate-500 text-center py-20">Aún no has realizado ningún test.</p>
+        <p className="text-slate-500 dark:text-slate-400 text-center py-20">Aún no has realizado ningún test.</p>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {results.map(result => (
@@ -387,30 +452,30 @@ const HistoryPage = ({ user }: { user: User }) => {
               key={result.id}
               onPointerDown={() => handlePointerDown(result.id)}
               onPointerUp={handlePointerUp}
-              onPointerLeave={handlePointerUp} // Si sale el dedo/ratón, cancela el timer
+              onPointerLeave={handlePointerUp} 
               onClick={(e) => handleClick(result.id, e)}
               className={`
-                bg-white rounded-xl shadow-sm border p-4 cursor-pointer transition-all select-none
-                ${selectionMode && selectedIds.has(result.id) ? 'ring-2 ring-brand-500 bg-brand-50 border-brand-500' : 'border-slate-100 hover:shadow-md hover:border-slate-300'}
+                bg-white dark:bg-slate-800 rounded-xl shadow-sm border p-4 cursor-pointer transition-all select-none
+                ${selectionMode && selectedIds.has(result.id) ? 'ring-2 ring-brand-500 bg-brand-50 dark:bg-brand-900 border-brand-500' : 'border-slate-100 dark:border-slate-700 hover:shadow-md hover:border-slate-300 dark:hover:border-slate-600'}
               `}
             >
               <div className="flex justify-between items-start">
                 <div className="flex items-start gap-3">
                    {selectionMode && (
-                     <div className={`mt-1 ${selectedIds.has(result.id) ? 'text-brand-600' : 'text-slate-300'}`}>
+                     <div className={`mt-1 ${selectedIds.has(result.id) ? 'text-brand-600 dark:text-brand-400' : 'text-slate-300 dark:text-slate-600'}`}>
                        {selectedIds.has(result.id) ? <CheckSquare size={20}/> : <Square size={20}/>}
                      </div>
                    )}
                    <div>
-                      <h3 className="font-semibold text-slate-800 line-clamp-1">{result.testTitle}</h3>
-                      <p className="text-xs text-slate-500">{new Date(result.date).toLocaleDateString()} {new Date(result.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
+                      <h3 className="font-semibold text-slate-800 dark:text-slate-100 line-clamp-1">{result.testTitle}</h3>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">{new Date(result.date).toLocaleDateString()} {new Date(result.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
                    </div>
                 </div>
                 <div className="text-right">
-                  <div className={`text-xl font-bold ${result.score / result.totalQuestions >= 0.5 ? 'text-green-600' : 'text-red-600'}`}>
+                  <div className={`text-xl font-bold ${result.score / result.totalQuestions >= 0.5 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                     {Math.round((result.score / result.totalQuestions) * 100)}%
                   </div>
-                  <div className="text-xs text-slate-400">{result.score}/{result.totalQuestions}</div>
+                  <div className="text-xs text-slate-400 dark:text-slate-500">{result.score}/{result.totalQuestions}</div>
                 </div>
               </div>
             </div>
@@ -435,9 +500,6 @@ const EditorPage = ({ user }: { user: User }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [showListSelector, setShowListSelector] = useState(false);
   
-  // Ref para controlar si ya hemos intentado abrir la cámara automáticamente
-  const hasTriggeredCamera = useRef(false);
-
   // Inicialización
   useEffect(() => {
     const init = async () => {
@@ -448,10 +510,7 @@ const EditorPage = ({ user }: { user: User }) => {
         if (test && test.userId === user.uid) {
           setTitle(test.title);
           setQuestions(test.questions);
-          // IMPORTANTE: Ir a la última pregunta "nueva" si estamos en modo manual/cámara para añadir más
-          // Si venimos de la home "Editar", quizás queremos ver la primera?
-          // El usuario dijo: "Si elijo una lista que ya tiene preguntas... debería crear una pregunta 11 vacía"
-          // Así que siempre vamos al final si estamos editando.
+          // Ir al final para añadir más
           setCurrentQIndex(test.questions.length); 
         } else {
            alert("Error al cargar test.");
@@ -469,19 +528,6 @@ const EditorPage = ({ user }: { user: User }) => {
     init();
   }, [editId, modeParam, user]);
 
-  // Efecto para abrir cámara automáticamente si es mode=camera
-  useEffect(() => {
-    if (modeParam === 'camera' && !showListSelector && !isLoading && !hasTriggeredCamera.current) {
-        // Intentamos hacer click en el input file
-        const fileInput = document.getElementById('file-upload-trigger');
-        if (fileInput) {
-            hasTriggeredCamera.current = true;
-            fileInput.click();
-        }
-    }
-  }, [modeParam, showListSelector, isLoading]);
-
-
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -492,25 +538,36 @@ const EditorPage = ({ user }: { user: User }) => {
       try {
         const base64String = (reader.result as string).split(',')[1];
         const extractedQuestions = await parseFileToQuiz(base64String, file.type);
-        setQuestions(prev => [...prev, ...extractedQuestions]);
-        // Ir a la primera pregunta nueva
-        setCurrentQIndex(prev => questions.length); 
+        
+        // CORRECCIÓN: Añadir correctamente las preguntas al estado y actualizar índice
+        setQuestions(prev => {
+           // IMPORTANTE: Aquí aseguramos que se añaden a las existentes
+           return [...prev, ...extractedQuestions];
+        });
+        
+        // Avanzamos el índice para que el usuario vea la primera pregunta nueva
+        // Usamos functional update con 'questions.length' que puede ser stale, 
+        // pero podemos usar la longitud previa + 0 porque 'setQuestions' es async.
+        // La mejor manera es simplemente sumar la longitud de las extraídas.
+        setCurrentQIndex(prev => prev + extractedQuestions.length); 
+
       } catch (err: any) {
         alert(err.message);
       } finally {
         setIsLoading(false);
+        // Limpiar el input para permitir subir el mismo archivo si es necesario
+        e.target.value = '';
       }
     };
     reader.readAsDataURL(file);
   };
 
   const getCurrentQuestion = (): Question => {
-    // Si el índice es igual al length, es una nueva pregunta "fantasma" que estamos creando
     if (currentQIndex === questions.length) {
       return {
         id: generateId(),
         text: '',
-        options: Array(4).fill(null).map(() => ({ id: generateId(), text: '' })), // Por defecto 4
+        options: Array(4).fill(null).map(() => ({ id: generateId(), text: '' })), 
         correctOptionId: ''
       };
     }
@@ -519,7 +576,6 @@ const EditorPage = ({ user }: { user: User }) => {
 
   const updateCurrentQuestion = (field: keyof Question, value: any) => {
     const newQs = [...questions];
-    // Si estamos editando la "nueva", la añadimos al array
     if (currentQIndex === questions.length) {
        const newQ = getCurrentQuestion();
        (newQ as any)[field] = value;
@@ -558,6 +614,10 @@ const EditorPage = ({ user }: { user: User }) => {
     const validQuestions = questions.filter(q => q.text.trim() !== '');
     if (validQuestions.length === 0) return alert("Añade al menos una pregunta.");
     
+    // VALIDACIÓN: Respuesta vacía
+    const hasEmptyOptions = validQuestions.some(q => q.options.some(o => !o.text.trim()));
+    if (hasEmptyOptions) return alert("No puede haber respuestas vacías. Revisa tus preguntas.");
+
     const missingAnswers = validQuestions.some(q => !q.correctOptionId);
     if (missingAnswers) return alert("Todas las preguntas deben tener una respuesta correcta marcada.");
 
@@ -565,7 +625,7 @@ const EditorPage = ({ user }: { user: User }) => {
     
     try {
       const test: Test = {
-        id: editId || generateId(), // Usar ID existente si editamos
+        id: editId || generateId(), 
         userId: user.uid,
         title,
         createdAt: Date.now(),
@@ -586,15 +646,21 @@ const EditorPage = ({ user }: { user: User }) => {
        // Navegar a modo edición de esa lista, manteniendo el modo
        navigate(`/editor/${id}?mode=${modeParam}`, { replace: true });
        setShowListSelector(false);
+       
+       // TRIGGER: Si es cámara, abrir el selector AHORA que se cerró el modal
+       if (modeParam === 'camera') {
+           setTimeout(() => {
+               document.getElementById('file-upload-trigger')?.click();
+           }, 100);
+       }
     } else if (newTitle) {
       // Nuevo test
       setTitle(newTitle);
       setQuestions([]);
       setCurrentQIndex(0);
       setShowListSelector(false);
-      // No navegamos a /id porque aun no tiene, se generará al guardar.
-      // Pero si es cámara, tenemos que activar el trigger manualmente porque el useEffect
-      // solo salta al cambiar modeParam.
+      
+      // TRIGGER: Si es cámara, abrir el selector AHORA
       if (modeParam === 'camera') {
          setTimeout(() => {
              document.getElementById('file-upload-trigger')?.click();
@@ -605,9 +671,9 @@ const EditorPage = ({ user }: { user: User }) => {
 
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center h-screen bg-slate-50">
+      <div className="flex flex-col items-center justify-center h-screen bg-slate-50 dark:bg-slate-900">
         <Loader2 className="animate-spin text-brand-600 mb-4" size={48} />
-        <p className="text-slate-500">Procesando...</p>
+        <p className="text-slate-500 dark:text-slate-400">Procesando...</p>
       </div>
     );
   }
@@ -625,37 +691,36 @@ const EditorPage = ({ user }: { user: User }) => {
         />
       )}
 
-      {/* Input oculto para cámara */}
+      {/* Input oculto para cámara. Restringimos accept para evitar Video en la medida de lo posible */}
       <input 
         id="file-upload-trigger" 
         type="file" 
         className="hidden" 
-        accept="image/*,.pdf" 
+        accept="image/png,image/jpeg,image/webp,application/pdf" 
         onChange={handleFileUpload} 
       />
 
-      <header className="sticky top-0 bg-white/90 backdrop-blur z-20 py-4 border-b border-slate-200 mb-6 flex justify-between items-center px-4 -mx-4 shadow-sm">
+      <header className="sticky top-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur z-20 py-4 border-b border-slate-200 dark:border-slate-800 mb-6 flex justify-between items-center px-4 -mx-4 shadow-sm">
         <div className="flex items-center gap-2">
-           <button onClick={() => navigate('/')} className="p-2 hover:bg-slate-100 rounded-full"><ArrowLeft /></button>
+           <button onClick={() => navigate('/')} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-slate-600 dark:text-slate-300"><ArrowLeft /></button>
            <div className="flex flex-col">
-             <span className="text-xs text-slate-400 font-bold uppercase">Editando Lista</span>
+             <span className="text-xs text-slate-400 dark:text-slate-500 font-bold uppercase">Editando Lista</span>
              <input 
                 value={title}
                 onChange={e => setTitle(e.target.value)}
                 placeholder="Título de la lista..."
-                className="font-bold text-slate-800 bg-transparent focus:outline-none focus:border-b-2 border-brand-500 w-48 sm:w-auto placeholder:text-slate-300"
+                className="font-bold text-slate-800 dark:text-white bg-transparent focus:outline-none focus:border-b-2 border-brand-500 w-48 sm:w-auto placeholder:text-slate-300"
              />
            </div>
         </div>
         <div className="flex gap-2">
-            {/* Botón extra para abrir cámara si estamos editando y queremos añadir más */}
-            <Button variant="secondary" onClick={() => document.getElementById('file-upload-trigger')?.click()} className="p-2 h-12 w-12 rounded-full flex items-center justify-center border-slate-200 shadow-sm">
-               <Camera size={20} className="text-slate-600"/>
+            <Button variant="secondary" onClick={() => document.getElementById('file-upload-trigger')?.click()} className="p-2 h-12 w-12 rounded-full flex items-center justify-center border-slate-200 dark:border-slate-700 dark:bg-slate-800 shadow-sm">
+               <Camera size={20} className="text-slate-600 dark:text-slate-300"/>
             </Button>
             
             <div className="flex flex-col items-center">
-                <span className="text-[10px] font-bold text-brand-600 uppercase tracking-wider mb-1">Guardar</span>
-                <Button onClick={handleSave} className="w-12 h-12 rounded-full p-0 flex items-center justify-center shadow-lg shadow-brand-200 bg-brand-600 hover:bg-brand-700">
+                <span className="text-[10px] font-bold text-brand-600 dark:text-brand-400 uppercase tracking-wider mb-1">Guardar</span>
+                <Button onClick={handleSave} className="w-12 h-12 rounded-full p-0 flex items-center justify-center shadow-lg shadow-brand-200 dark:shadow-none bg-brand-600 hover:bg-brand-700">
                   <Save size={20} />
                 </Button>
             </div>
@@ -665,37 +730,37 @@ const EditorPage = ({ user }: { user: User }) => {
       <div className="space-y-6">
         
         {/* Navegación de Preguntas */}
-        <div className="flex justify-between items-center bg-white p-2 rounded-xl shadow-sm border border-slate-200 mb-4">
-           <Button variant="ghost" onClick={() => navigateQuestion('prev')} disabled={currentQIndex === 0}>
+        <div className="flex justify-between items-center bg-white dark:bg-slate-800 p-2 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 mb-4">
+           <Button variant="ghost" onClick={() => navigateQuestion('prev')} disabled={currentQIndex === 0} className="dark:text-slate-300 dark:hover:bg-slate-700">
              <ChevronLeft /> Anterior
            </Button>
-           <span className="font-mono font-bold text-slate-500">
-             {currentQIndex + 1} <span className="text-slate-300">/</span> {questions.length + (activeQ.text ? 1 : 0)}
+           <span className="font-mono font-bold text-slate-500 dark:text-slate-400">
+             {currentQIndex + 1} <span className="text-slate-300 dark:text-slate-600">/</span> {questions.length + (activeQ.text ? 1 : 0)}
            </span>
-           <Button variant="ghost" onClick={() => navigateQuestion('next')} className="text-brand-600">
+           <Button variant="ghost" onClick={() => navigateQuestion('next')} className="text-brand-600 dark:text-brand-400 dark:hover:bg-slate-700">
              Siguiente <ChevronRight />
            </Button>
         </div>
 
         {/* Tarjeta de Edición */}
-        <div className="bg-white rounded-2xl shadow-md border border-slate-200 p-6 relative min-h-[400px]">
+        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-md border border-slate-200 dark:border-slate-700 p-6 relative min-h-[400px]">
             <div className="mb-6">
-              <label className="block text-xs uppercase text-slate-400 font-bold mb-2">Pregunta</label>
+              <label className="block text-xs uppercase text-slate-400 dark:text-slate-500 font-bold mb-2">Pregunta</label>
               <TextArea 
                 value={activeQ.text} 
                 onChange={e => updateCurrentQuestion('text', e.target.value)} 
                 placeholder="Escribe la pregunta aquí..."
-                className="text-lg bg-slate-50 border-slate-200 min-h-[100px] focus:bg-white transition-colors"
+                className="text-lg bg-slate-50 dark:bg-slate-900 dark:text-white dark:border-slate-700 border-slate-200 min-h-[100px] focus:bg-white dark:focus:bg-slate-800 transition-colors"
               />
             </div>
 
             <div className="space-y-3">
-              <label className="block text-xs uppercase text-slate-400 font-bold mb-2">Respuestas (Marca la correcta)</label>
+              <label className="block text-xs uppercase text-slate-400 dark:text-slate-500 font-bold mb-2">Respuestas (Marca la correcta)</label>
               {activeQ.options.map((opt, oIndex) => (
                 <div key={opt.id} className="flex items-center gap-3 group">
                   <button 
                     onClick={() => setCorrectOption(opt.id)}
-                    className={`flex-shrink-0 w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all ${activeQ.correctOptionId === opt.id ? 'border-green-500 bg-green-500 text-white shadow-md shadow-green-200' : 'border-slate-300 bg-white text-transparent hover:border-slate-400'}`}
+                    className={`flex-shrink-0 w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all ${activeQ.correctOptionId === opt.id ? 'border-green-500 bg-green-500 text-white shadow-md shadow-green-200 dark:shadow-none' : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-transparent hover:border-slate-400'}`}
                   >
                     <CheckCircle size={18} fill="currentColor" className={activeQ.correctOptionId === opt.id ? 'text-white' : ''} />
                   </button>
@@ -707,7 +772,7 @@ const EditorPage = ({ user }: { user: User }) => {
                       value={opt.text} 
                       onChange={e => updateOption(oIndex, e.target.value)} 
                       placeholder={`Opción ${oIndex + 1}`}
-                      className="pl-8 py-3 bg-slate-50 border-slate-200 focus:bg-white transition-colors shadow-sm"
+                      className="pl-8 py-3 bg-slate-50 dark:bg-slate-900 dark:text-white dark:border-slate-700 border-slate-200 focus:bg-white dark:focus:bg-slate-800 transition-colors shadow-sm"
                     />
                   </div>
                   <button 
@@ -727,7 +792,7 @@ const EditorPage = ({ user }: { user: User }) => {
                    const newOpt = { id: generateId(), text: '' };
                    updateCurrentQuestion('options', [...activeQ.options, newOpt]);
                 }}
-                className="mt-2 text-sm font-medium text-brand-600 hover:text-brand-700 flex items-center gap-1 px-2 py-1 rounded hover:bg-brand-50 transition-colors w-fit"
+                className="mt-2 text-sm font-medium text-brand-600 dark:text-brand-400 hover:text-brand-700 flex items-center gap-1 px-2 py-1 rounded hover:bg-brand-50 dark:hover:bg-slate-700 transition-colors w-fit"
               >
                 <Plus size={16}/> Añadir otra opción
               </button>
@@ -831,7 +896,7 @@ const QuizPage = ({ user }: { user: User }) => {
     navigate(`/history/${result.id}`, { replace: true });
   };
 
-  if (loading) return <div className="flex justify-center h-screen items-center"><Loader2 className="animate-spin text-brand-500" /></div>;
+  if (loading) return <div className="flex justify-center h-screen items-center bg-slate-50 dark:bg-slate-900"><Loader2 className="animate-spin text-brand-500" /></div>;
   if (!test) return <div>No se encontró el test.</div>;
   if (questions.length === 0) return <div>Este test no tiene preguntas.</div>;
 
@@ -841,36 +906,36 @@ const QuizPage = ({ user }: { user: User }) => {
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)] max-w-2xl mx-auto w-full">
       <header className="flex justify-between items-center mb-6 pt-4">
-        <button onClick={() => navigate('/')} className="text-slate-400 hover:text-slate-600"><XCircle size={28} /></button>
-        <div className="bg-white px-4 py-1 rounded-full border border-slate-200 text-sm font-bold text-slate-600 shadow-sm">
+        <button onClick={() => navigate('/')} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"><XCircle size={28} /></button>
+        <div className="bg-white dark:bg-slate-800 px-4 py-1 rounded-full border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-600 dark:text-slate-300 shadow-sm">
           {currentIndex + 1} / {questions.length}
         </div>
-        <button onClick={finishQuiz} className="text-brand-600 font-bold text-sm hover:underline">Terminar</button>
+        <button onClick={finishQuiz} className="text-brand-600 dark:text-brand-400 font-bold text-sm hover:underline">Terminar</button>
       </header>
 
       {/* Aplicar scrollbar-hide aquí */}
       <div className="flex-1 overflow-y-auto scrollbar-hide p-1">
-        <Card className="mb-6 border-l-4 border-l-brand-500 shadow-lg bg-white">
-           <h2 className="text-xl md:text-2xl font-bold text-slate-800 leading-relaxed">{currentQ.text}</h2>
+        <Card className="mb-6 border-l-4 border-l-brand-500 shadow-lg bg-white dark:bg-slate-800 dark:border-none">
+           <h2 className="text-xl md:text-2xl font-bold text-slate-800 dark:text-white leading-relaxed">{currentQ.text}</h2>
         </Card>
 
         <div className="space-y-3">
           {currentQ.options.map((opt, index) => {
-            let stateStyle = "border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300";
-            let icon = <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 font-bold flex items-center justify-center text-sm">{labels[index]}</div>;
+            let stateStyle = "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-300";
+            let icon = <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 font-bold flex items-center justify-center text-sm">{labels[index]}</div>;
 
             if (isAnswerChecked) {
               if (opt.id === currentQ.correctOptionId) {
-                 stateStyle = "border-green-500 bg-green-50 ring-1 ring-green-500";
+                 stateStyle = "border-green-500 bg-green-50 dark:bg-green-900/20 ring-1 ring-green-500";
                  icon = <div className="w-8 h-8 rounded-full bg-green-500 text-white flex items-center justify-center"><CheckCircle size={18}/></div>;
               } else if (opt.id === selectedOptionId) {
-                 stateStyle = "border-red-500 bg-red-50 ring-1 ring-red-500";
+                 stateStyle = "border-red-500 bg-red-50 dark:bg-red-900/20 ring-1 ring-red-500";
                  icon = <div className="w-8 h-8 rounded-full bg-red-500 text-white flex items-center justify-center"><XCircle size={18}/></div>;
               } else {
-                 stateStyle = "opacity-60 border-slate-100 grayscale";
+                 stateStyle = "opacity-60 border-slate-100 dark:border-slate-700 grayscale";
               }
             } else if (selectedOptionId === opt.id) {
-               stateStyle = "border-brand-500 bg-brand-50";
+               stateStyle = "border-brand-500 bg-brand-50 dark:bg-brand-900/20";
             }
 
             return (
@@ -880,16 +945,16 @@ const QuizPage = ({ user }: { user: User }) => {
                 className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex items-center gap-4 shadow-sm ${stateStyle}`}
               >
                 {icon}
-                <span className="font-medium text-slate-700 text-lg">{opt.text}</span>
+                <span className="font-medium text-slate-700 dark:text-slate-200 text-lg">{opt.text}</span>
               </div>
             );
           })}
         </div>
       </div>
 
-      <div className="mt-6 pt-4 border-t border-slate-200/50">
+      <div className="mt-6 pt-4 border-t border-slate-200/50 dark:border-slate-700">
         {isAnswerChecked ? (
-           <Button onClick={handleNext} className="w-full py-4 text-xl shadow-xl shadow-brand-500/20 rounded-2xl animate-in slide-in-from-bottom-2">
+           <Button onClick={handleNext} className="w-full py-4 text-xl shadow-xl shadow-brand-500/20 dark:shadow-none rounded-2xl animate-in slide-in-from-bottom-2">
              {currentIndex === questions.length - 1 ? 'Ver Resultados' : 'Siguiente Pregunta'}
            </Button>
         ) : (
@@ -925,11 +990,11 @@ const ResultViewPage = ({ user }: { user: User }) => {
   return (
     <div className="pb-24 max-w-3xl mx-auto">
        <header className="flex items-center gap-2 mb-6">
-         <button onClick={() => navigate('/history')} className="p-2 hover:bg-white rounded-full"><ArrowLeft /></button>
-         <h1 className="font-bold text-xl">Resumen</h1>
+         <button onClick={() => navigate('/history')} className="p-2 hover:bg-white rounded-full dark:text-white dark:hover:bg-slate-700"><ArrowLeft /></button>
+         <h1 className="font-bold text-xl text-slate-800 dark:text-white">Resumen</h1>
        </header>
 
-       <Card className="text-center py-10 mb-8 bg-gradient-to-br from-brand-600 to-brand-700 text-white border-none shadow-xl shadow-brand-500/20">
+       <Card className="text-center py-10 mb-8 bg-gradient-to-br from-brand-600 to-brand-700 text-white border-none shadow-xl shadow-brand-500/20 dark:shadow-none">
           <h2 className="text-brand-100 font-medium mb-4 text-lg">{result.testTitle}</h2>
           <div className="text-7xl font-bold mb-4 tracking-tighter">{percentage}%</div>
           <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur px-4 py-2 rounded-full border border-white/10">
@@ -940,26 +1005,26 @@ const ResultViewPage = ({ user }: { user: User }) => {
           </div>
        </Card>
 
-       <h3 className="font-bold text-lg mb-4 text-slate-700 px-2">Revisión de respuestas</h3>
+       <h3 className="font-bold text-lg mb-4 text-slate-700 dark:text-slate-300 px-2">Revisión de respuestas</h3>
        <div className="space-y-4">
          {result.details.map((detail, i) => (
-           <div key={i} className={`bg-white rounded-xl p-5 shadow-sm border-l-4 ${detail.isCorrect ? 'border-l-green-500' : 'border-l-red-500'}`}>
+           <div key={i} className={`bg-white dark:bg-slate-800 rounded-xl p-5 shadow-sm border-l-4 ${detail.isCorrect ? 'border-l-green-500' : 'border-l-red-500'}`}>
              <div className="flex gap-3 mb-3">
-               <span className="font-bold text-slate-300">#{i+1}</span>
-               <p className="font-semibold text-slate-800">{detail.questionText}</p>
+               <span className="font-bold text-slate-300 dark:text-slate-600">#{i+1}</span>
+               <p className="font-semibold text-slate-800 dark:text-slate-200">{detail.questionText}</p>
              </div>
              <div className="space-y-2 pl-8">
                {detail.options.map(opt => {
                  const isSelected = opt.id === detail.selectedOptionId;
                  const isCorrect = opt.id === detail.correctOptionId;
-                 let style = "text-slate-500";
+                 let style = "text-slate-500 dark:text-slate-400";
                  let icon = null;
 
                  if (isCorrect) {
-                   style = "text-green-700 font-bold bg-green-50 px-2 py-1 rounded -ml-2";
+                   style = "text-green-700 dark:text-green-400 font-bold bg-green-50 dark:bg-green-900/20 px-2 py-1 rounded -ml-2";
                    icon = <CheckCircle size={16} className="inline mr-2"/>;
                  } else if (isSelected && !isCorrect) {
-                   style = "text-red-600 font-medium line-through decoration-red-600/50 bg-red-50 px-2 py-1 rounded -ml-2";
+                   style = "text-red-600 dark:text-red-400 font-medium line-through decoration-red-600/50 bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded -ml-2";
                    icon = <XCircle size={16} className="inline mr-2"/>;
                  }
 
@@ -983,7 +1048,7 @@ const FabMenu = ({ onAction }: { onAction: (action: 'manual' | 'camera') => void
   const [isOpen, setIsOpen] = useState(false);
 
   // Clases para animación de botones hijos: salen desde la posición del botón padre
-  const btnCommon = "absolute left-1/2 -translate-x-1/2 w-12 h-12 rounded-full shadow-lg flex items-center justify-center border border-slate-200 transition-all duration-300 ease-out";
+  const btnCommon = "absolute left-1/2 -translate-x-1/2 w-12 h-12 rounded-full shadow-lg flex items-center justify-center border border-slate-200 dark:border-slate-600 transition-all duration-300 ease-out";
   
   // Posiciones: 
   // Manual: arriba a la izquierda (-50px, -60px) -> Simplificaremos a Vertical para que sea "detrás" como pediste
@@ -995,19 +1060,19 @@ const FabMenu = ({ onAction }: { onAction: (action: 'manual' | 'camera') => void
        {/* Botón Manual */}
        <button 
          onClick={() => { setIsOpen(false); onAction('manual'); }}
-         className={`${btnCommon} ${isOpen ? '-translate-y-[85px] opacity-100' : 'translate-y-0 opacity-0 pointer-events-none'} bg-white text-slate-700 hover:bg-brand-50 hover:text-brand-600 z-0`}
+         className={`${btnCommon} ${isOpen ? '-translate-y-[85px] opacity-100' : 'translate-y-0 opacity-0 pointer-events-none'} bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-slate-600 z-0`}
        >
          <PenTool size={20} />
-         <span className={`absolute top-full mt-1 bg-white/80 backdrop-blur px-2 rounded text-[10px] font-bold text-slate-600 transition-opacity duration-300 ${isOpen ? 'opacity-100' : 'opacity-0'}`}>Manual</span>
+         <span className={`absolute top-full mt-1 bg-white/80 dark:bg-slate-800/80 backdrop-blur px-2 rounded text-[10px] font-bold text-slate-600 dark:text-slate-300 transition-opacity duration-300 ${isOpen ? 'opacity-100' : 'opacity-0'}`}>Manual</span>
        </button>
 
        {/* Botón Escanear */}
        <button 
          onClick={() => { setIsOpen(false); onAction('camera'); }}
-         className={`${btnCommon} ${isOpen ? '-translate-y-[150px] opacity-100' : 'translate-y-0 opacity-0 pointer-events-none'} bg-white text-slate-700 hover:bg-brand-50 hover:text-brand-600 z-0`}
+         className={`${btnCommon} ${isOpen ? '-translate-y-[150px] opacity-100' : 'translate-y-0 opacity-0 pointer-events-none'} bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-slate-600 z-0`}
        >
          <Camera size={20} />
-         <span className={`absolute top-full mt-1 bg-white/80 backdrop-blur px-2 rounded text-[10px] font-bold text-slate-600 transition-opacity duration-300 ${isOpen ? 'opacity-100' : 'opacity-0'}`}>Escanear</span>
+         <span className={`absolute top-full mt-1 bg-white/80 dark:bg-slate-800/80 backdrop-blur px-2 rounded text-[10px] font-bold text-slate-600 dark:text-slate-300 transition-opacity duration-300 ${isOpen ? 'opacity-100' : 'opacity-0'}`}>Escanear</span>
        </button>
 
        {/* Botón Principal (+) */}
@@ -1015,7 +1080,7 @@ const FabMenu = ({ onAction }: { onAction: (action: 'manual' | 'camera') => void
          onClick={() => setIsOpen(!isOpen)} 
          className={`
            relative z-10 w-16 h-16 rounded-full shadow-xl flex items-center justify-center transition-all duration-300
-           ${isOpen ? 'bg-slate-800 rotate-45 scale-90' : 'bg-brand-600 hover:scale-105 hover:bg-brand-700'}
+           ${isOpen ? 'bg-slate-800 dark:bg-slate-600 rotate-45 scale-90' : 'bg-brand-600 hover:scale-105 hover:bg-brand-700'}
            text-white
          `}
        >
@@ -1044,11 +1109,11 @@ const Layout = ({ children, user }: { children?: React.ReactNode, user: User }) 
         {children}
       </main>
       
-      <nav className="bg-white/90 backdrop-blur-md border-t border-slate-200 fixed bottom-0 left-0 right-0 z-50 shadow-lg pb-safe">
+      <nav className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 fixed bottom-0 left-0 right-0 z-50 shadow-lg pb-safe">
         <div className="max-w-md mx-auto flex justify-around items-center h-16 px-4 relative">
           <button 
             onClick={() => navigate('/')} 
-            className={`flex flex-col items-center p-2 rounded-xl transition-colors w-16 ${location.pathname === '/' ? 'text-brand-600 bg-brand-50' : 'text-slate-400 hover:text-slate-600'}`}
+            className={`flex flex-col items-center p-2 rounded-xl transition-colors w-16 ${location.pathname === '/' ? 'text-brand-600 bg-brand-50 dark:bg-slate-800 dark:text-brand-400' : 'text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300'}`}
           >
             <HomeIcon size={24} />
             <span className="text-[10px] font-bold mt-1">Inicio</span>
@@ -1058,7 +1123,7 @@ const Layout = ({ children, user }: { children?: React.ReactNode, user: User }) 
           
           <button 
             onClick={() => navigate('/history')} 
-            className={`flex flex-col items-center p-2 rounded-xl transition-colors w-16 ${location.pathname.startsWith('/history') ? 'text-brand-600 bg-brand-50' : 'text-slate-400 hover:text-slate-600'}`}
+            className={`flex flex-col items-center p-2 rounded-xl transition-colors w-16 ${location.pathname.startsWith('/history') ? 'text-brand-600 bg-brand-50 dark:bg-slate-800 dark:text-brand-400' : 'text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300'}`}
           >
             <HistoryIcon size={24} />
             <span className="text-[10px] font-bold mt-1">Historial</span>
@@ -1071,9 +1136,10 @@ const Layout = ({ children, user }: { children?: React.ReactNode, user: User }) 
 
 const App = () => {
   const { user, loading } = useAuth();
+  const { isDark } = useDarkMode(); // Initialize dark mode hook
 
   if (loading) {
-     return <div className="h-screen flex items-center justify-center bg-brand-50"><Loader2 className="animate-spin text-brand-500" size={32}/></div>;
+     return <div className="h-screen flex items-center justify-center bg-brand-50 dark:bg-slate-900"><Loader2 className="animate-spin text-brand-500" size={32}/></div>;
   }
 
   if (!user) {
@@ -1090,6 +1156,7 @@ const App = () => {
           <Route path="/quiz/:id" element={<QuizPage user={user} />} />
           <Route path="/history" element={<HistoryPage user={user} />} />
           <Route path="/history/:id" element={<ResultViewPage user={user} />} />
+          <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </Layout>
     </HashRouter>
