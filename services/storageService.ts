@@ -106,6 +106,22 @@ export const storageService = {
     }
   },
 
+  // Obtener resultado por ID
+  getResultById: async (id: string): Promise<TestResult | undefined> => {
+    try {
+      const docRef = doc(db, "results", id);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        return docSnap.data() as TestResult;
+      } else {
+        return undefined;
+      }
+    } catch (e) {
+      console.error("Error obteniendo resultado: ", e);
+      return undefined;
+    }
+  },
+
   // Borrar resultado individual
   deleteResult: async (id: string): Promise<void> => {
     try {

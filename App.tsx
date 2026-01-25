@@ -12,6 +12,8 @@ import {
   XCircle, 
   ChevronRight,
   ChevronLeft,
+  ChevronsLeft,
+  ChevronsRight,
   ArrowLeft,
   Save,
   Loader2,
@@ -26,7 +28,8 @@ import {
   X,
   Settings,
   Moon,
-  Sun
+  Sun,
+  Upload
 } from 'lucide-react';
 import { signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { auth, googleProvider } from './services/firebaseConfig';
@@ -486,6 +489,84 @@ const HistoryPage = ({ user }: { user: User }) => {
   );
 };
 
+const ResultViewPage = ({ user }: { user: User }) => {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const [result, setResult] = useState<TestResult | undefined>(undefined);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      if (!id) return;
+      setLoading(true);
+      const res = await storageService.getResultById(id);
+      if (res && res.userId === user.uid) {
+        setResult(res);
+      }
+      setLoading(false);
+    };
+    load();
+  }, [id, user]);
+
+  if (loading) return <div className="flex justify-center py-20"><Loader2 className="animate-spin text-brand-500" /></div>;
+  if (!result) return <div className="text-center py-20 text-slate-500">Resultado no encontrado o no tienes permiso para verlo.</div>;
+
+  return (
+    <div className="pb-24 max-w-3xl mx-auto p-4">
+       <header className="flex items-center gap-2 mb-6">
+          <button onClick={() => navigate('/history')} className="p-2 hover:bg-white/50 rounded-full text-slate-700 dark:text-slate-300"><ArrowLeft /></button>
+          <h1 className="font-bold text-xl text-slate-800 dark:text-white">Detalles del Resultado</h1>
+       </header>
+
+       <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 mb-6 text-center">
+          <p className="text-slate-500 dark:text-slate-400 text-sm uppercase tracking-wider font-bold mb-1">{result.testTitle}</p>
+          <div className={`text-5xl font-bold mb-2 ${result.score / result.totalQuestions >= 0.5 ? 'text-green-500' : 'text-red-500'}`}>
+             {Math.round((result.score / result.totalQuestions) * 100)}%
+          </div>
+          <p className="text-slate-600 dark:text-slate-300">
+            Has acertado <span className="font-bold">{result.score}</span> de <span className="font-bold">{result.totalQuestions}</span>
+          </p>
+          <p className="text-xs text-slate-400 mt-2">{new Date(result.date).toLocaleString()}</p>
+       </div>
+
+       <div className="space-y-4">
+          {result.details.map((detail, index) => (
+            <div key={index} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 p-4">
+               <div className="flex gap-3 mb-3">
+                  <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${detail.isCorrect ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                    {index + 1}
+                  </div>
+                  <p className="font-medium text-slate-800 dark:text-slate-200">{detail.questionText}</p>
+               </div>
+               
+               <div className="pl-9 space-y-2">
+                  {detail.options.map(opt => {
+                     let style = "border-slate-100 dark:border-slate-700 text-slate-500 dark:text-slate-400 opacity-60";
+                     let icon = null;
+
+                     if (opt.id === detail.correctOptionId) {
+                        style = "border-green-200 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 font-medium";
+                        icon = <CheckCircle size={14} className="text-green-600 dark:text-green-400" />;
+                     } else if (opt.id === detail.selectedOptionId && !detail.isCorrect) {
+                        style = "border-red-200 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 font-medium";
+                        icon = <XCircle size={14} className="text-red-600 dark:text-red-400" />;
+                     }
+
+                     return (
+                       <div key={opt.id} className={`p-2 rounded-lg border text-sm flex justify-between items-center ${style}`}>
+                          <span>{opt.text}</span>
+                          {icon}
+                       </div>
+                     );
+                  })}
+               </div>
+            </div>
+          ))}
+       </div>
+    </div>
+  );
+};
+
 const EditorPage = ({ user }: { user: User }) => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -510,8 +591,12 @@ const EditorPage = ({ user }: { user: User }) => {
         if (test && test.userId === user.uid) {
           setTitle(test.title);
           setQuestions(test.questions);
-          // Ir al final para añadir más
-          setCurrentQIndex(test.questions.length); 
+          // Ir al final para añadir más si venimos de cámara
+          if (modeParam === 'camera') {
+            setCurrentQIndex(test.questions.length);
+          } else {
+            setCurrentQIndex(0); // Si es manual o edición normal, empezamos al principio
+          }
         } else {
            alert("Error al cargar test.");
            navigate('/');
@@ -539,17 +624,15 @@ const EditorPage = ({ user }: { user: User }) => {
         const base64String = (reader.result as string).split(',')[1];
         const extractedQuestions = await parseFileToQuiz(base64String, file.type);
         
-        // CORRECCIÓN: Añadir correctamente las preguntas al estado y actualizar índice
         setQuestions(prev => {
-           // IMPORTANTE: Aquí aseguramos que se añaden a las existentes
            return [...prev, ...extractedQuestions];
         });
         
-        // Avanzamos el índice para que el usuario vea la primera pregunta nueva
-        // Usamos functional update con 'questions.length' que puede ser stale, 
-        // pero podemos usar la longitud previa + 0 porque 'setQuestions' es async.
-        // La mejor manera es simplemente sumar la longitud de las extraídas.
-        setCurrentQIndex(prev => prev + extractedQuestions.length); 
+        // CORRECCIÓN: Ir a la última pregunta añadida (la 8 si añadimos 3 a 5), no a una vacía.
+        // Si hay nuevas preguntas, ponemos el índice en la última de las nuevas.
+        if (extractedQuestions.length > 0) {
+           setCurrentQIndex(prev => Math.max(0, prev + extractedQuestions.length - 1));
+        }
 
       } catch (err: any) {
         alert(err.message);
@@ -609,6 +692,22 @@ const EditorPage = ({ user }: { user: User }) => {
     }
   };
 
+  // Funciones de navegación extra
+  const goToFirst = () => setCurrentQIndex(0);
+  const goToLast = () => {
+      // Si la última pregunta está vacía (modo añadir), vamos a la anterior válida, o al final
+      if (questions.length > 0) setCurrentQIndex(questions.length - 1);
+  };
+  const goToPagePrompt = () => {
+    const page = prompt(`Ir a pregunta (1 - ${questions.length + 1}):`);
+    if (page) {
+       const pageNum = parseInt(page);
+       if (!isNaN(pageNum) && pageNum >= 1 && pageNum <= questions.length + 1) {
+          setCurrentQIndex(pageNum - 1);
+       }
+    }
+  };
+
   const handleSave = async () => {
     if (!title.trim()) return alert("Escribe un título para la lista.");
     const validQuestions = questions.filter(q => q.text.trim() !== '');
@@ -618,8 +717,12 @@ const EditorPage = ({ user }: { user: User }) => {
     const hasEmptyOptions = validQuestions.some(q => q.options.some(o => !o.text.trim()));
     if (hasEmptyOptions) return alert("No puede haber respuestas vacías. Revisa tus preguntas.");
 
-    const missingAnswers = validQuestions.some(q => !q.correctOptionId);
-    if (missingAnswers) return alert("Todas las preguntas deben tener una respuesta correcta marcada.");
+    const missingAnswersIndex = validQuestions.findIndex(q => !q.correctOptionId);
+    if (missingAnswersIndex !== -1) {
+        // Navegar a la pregunta inválida
+        setCurrentQIndex(missingAnswersIndex);
+        return alert(`La pregunta ${missingAnswersIndex + 1} no tiene marcada la respuesta correcta.`);
+    }
 
     setIsLoading(true);
     
@@ -646,26 +749,13 @@ const EditorPage = ({ user }: { user: User }) => {
        // Navegar a modo edición de esa lista, manteniendo el modo
        navigate(`/editor/${id}?mode=${modeParam}`, { replace: true });
        setShowListSelector(false);
-       
-       // TRIGGER: Si es cámara, abrir el selector AHORA que se cerró el modal
-       if (modeParam === 'camera') {
-           setTimeout(() => {
-               document.getElementById('file-upload-trigger')?.click();
-           }, 100);
-       }
+       // Ya NO intentamos abrir la cámara automáticamente aquí, es poco fiable en móvil.
     } else if (newTitle) {
       // Nuevo test
       setTitle(newTitle);
       setQuestions([]);
       setCurrentQIndex(0);
       setShowListSelector(false);
-      
-      // TRIGGER: Si es cámara, abrir el selector AHORA
-      if (modeParam === 'camera') {
-         setTimeout(() => {
-             document.getElementById('file-upload-trigger')?.click();
-         }, 100);
-      }
     }
   };
 
@@ -679,6 +769,7 @@ const EditorPage = ({ user }: { user: User }) => {
   }
 
   const activeQ = getCurrentQuestion();
+  const isCameraMode = modeParam === 'camera';
 
   return (
     <div className="pb-24 max-w-4xl mx-auto">
@@ -714,9 +805,12 @@ const EditorPage = ({ user }: { user: User }) => {
            </div>
         </div>
         <div className="flex gap-2">
-            <Button variant="secondary" onClick={() => document.getElementById('file-upload-trigger')?.click()} className="p-2 h-12 w-12 rounded-full flex items-center justify-center border-slate-200 dark:border-slate-700 dark:bg-slate-800 shadow-sm">
-               <Camera size={20} className="text-slate-600 dark:text-slate-300"/>
-            </Button>
+             <div className="flex flex-col items-center">
+                <span className="text-[10px] font-bold text-brand-600 dark:text-brand-400 uppercase tracking-wider mb-1">Escanear</span>
+                <Button variant="secondary" onClick={() => document.getElementById('file-upload-trigger')?.click()} className="w-12 h-12 rounded-full p-0 flex items-center justify-center border-slate-200 dark:border-slate-700 dark:bg-slate-800 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700">
+                   <Camera size={20} className="text-slate-600 dark:text-slate-300"/>
+                </Button>
+            </div>
             
             <div className="flex flex-col items-center">
                 <span className="text-[10px] font-bold text-brand-600 dark:text-brand-400 uppercase tracking-wider mb-1">Guardar</span>
@@ -727,19 +821,45 @@ const EditorPage = ({ user }: { user: User }) => {
         </div>
       </header>
 
+      {/* Mensaje de ayuda para modo escáner en móvil si la lista está vacía o se acaba de cargar */}
+      {isCameraMode && questions.length === 0 && !isLoading && (
+         <div className="mb-6 bg-brand-50 dark:bg-slate-800 border border-brand-200 dark:border-slate-700 rounded-xl p-6 text-center">
+            <div className="bg-white dark:bg-slate-700 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm">
+                <Camera className="text-brand-500" size={32} />
+            </div>
+            <h3 className="font-bold text-lg text-slate-800 dark:text-white mb-2">Modo Escáner Activo</h3>
+            <p className="text-slate-600 dark:text-slate-300 mb-4 text-sm">Añade preguntas haciendo fotos o subiendo un PDF.</p>
+            <Button onClick={() => document.getElementById('file-upload-trigger')?.click()} className="w-full py-3 flex items-center justify-center gap-2">
+               <Upload size={18} /> Abrir Cámara / Archivo
+            </Button>
+         </div>
+      )}
+
       <div className="space-y-6">
         
-        {/* Navegación de Preguntas */}
+        {/* Navegación de Preguntas Mejorada */}
         <div className="flex justify-between items-center bg-white dark:bg-slate-800 p-2 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 mb-4">
-           <Button variant="ghost" onClick={() => navigateQuestion('prev')} disabled={currentQIndex === 0} className="dark:text-slate-300 dark:hover:bg-slate-700">
-             <ChevronLeft /> Anterior
-           </Button>
-           <span className="font-mono font-bold text-slate-500 dark:text-slate-400">
+           <div className="flex gap-1">
+               <Button variant="ghost" onClick={goToFirst} disabled={currentQIndex === 0} className="px-2 dark:text-slate-400 dark:hover:bg-slate-700" title="Ir al principio">
+                 <ChevronsLeft size={20} />
+               </Button>
+               <Button variant="ghost" onClick={() => navigateQuestion('prev')} disabled={currentQIndex === 0} className="px-2 dark:text-slate-300 dark:hover:bg-slate-700">
+                 <ChevronLeft size={20} />
+               </Button>
+           </div>
+           
+           <button onClick={goToPagePrompt} className="font-mono font-bold text-slate-500 dark:text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 px-2 py-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
              {currentQIndex + 1} <span className="text-slate-300 dark:text-slate-600">/</span> {questions.length + (activeQ.text ? 1 : 0)}
-           </span>
-           <Button variant="ghost" onClick={() => navigateQuestion('next')} className="text-brand-600 dark:text-brand-400 dark:hover:bg-slate-700">
-             Siguiente <ChevronRight />
-           </Button>
+           </button>
+
+           <div className="flex gap-1">
+               <Button variant="ghost" onClick={() => navigateQuestion('next')} className="px-2 text-brand-600 dark:text-brand-400 dark:hover:bg-slate-700">
+                 <ChevronRight size={20} />
+               </Button>
+               <Button variant="ghost" onClick={goToLast} className="px-2 text-brand-600 dark:text-brand-400 dark:hover:bg-slate-700" title="Ir al final">
+                 <ChevronsRight size={20} />
+               </Button>
+           </div>
         </div>
 
         {/* Tarjeta de Edición */}
@@ -965,94 +1085,13 @@ const QuizPage = ({ user }: { user: User }) => {
   );
 };
 
-const ResultViewPage = ({ user }: { user: User }) => {
-  const { id } = useParams();
-  const navigate = useNavigate();
-  const [result, setResult] = useState<TestResult | undefined>(undefined);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const loadResult = async () => {
-      setLoading(true);
-      const results = await storageService.getResults(user.uid);
-      const found = results.find(r => r.id === id);
-      setResult(found);
-      setLoading(false);
-    };
-    loadResult();
-  }, [id, user]);
-
-  if (loading) return <div className="flex justify-center pt-10"><Loader2 className="animate-spin text-brand-500" /></div>;
-  if (!result) return <div>Resultado no encontrado.</div>;
-
-  const percentage = Math.round((result.score / result.totalQuestions) * 100);
-
-  return (
-    <div className="pb-24 max-w-3xl mx-auto">
-       <header className="flex items-center gap-2 mb-6">
-         <button onClick={() => navigate('/history')} className="p-2 hover:bg-white rounded-full dark:text-white dark:hover:bg-slate-700"><ArrowLeft /></button>
-         <h1 className="font-bold text-xl text-slate-800 dark:text-white">Resumen</h1>
-       </header>
-
-       <Card className="text-center py-10 mb-8 bg-gradient-to-br from-brand-600 to-brand-700 text-white border-none shadow-xl shadow-brand-500/20 dark:shadow-none">
-          <h2 className="text-brand-100 font-medium mb-4 text-lg">{result.testTitle}</h2>
-          <div className="text-7xl font-bold mb-4 tracking-tighter">{percentage}%</div>
-          <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur px-4 py-2 rounded-full border border-white/10">
-            <CheckCircle size={16} className="text-green-300"/> 
-            <span className="font-medium">{result.score} aciertos</span>
-            <span className="opacity-50 mx-1">|</span>
-            <span className="font-medium">{result.totalQuestions} total</span>
-          </div>
-       </Card>
-
-       <h3 className="font-bold text-lg mb-4 text-slate-700 dark:text-slate-300 px-2">Revisión de respuestas</h3>
-       <div className="space-y-4">
-         {result.details.map((detail, i) => (
-           <div key={i} className={`bg-white dark:bg-slate-800 rounded-xl p-5 shadow-sm border-l-4 ${detail.isCorrect ? 'border-l-green-500' : 'border-l-red-500'}`}>
-             <div className="flex gap-3 mb-3">
-               <span className="font-bold text-slate-300 dark:text-slate-600">#{i+1}</span>
-               <p className="font-semibold text-slate-800 dark:text-slate-200">{detail.questionText}</p>
-             </div>
-             <div className="space-y-2 pl-8">
-               {detail.options.map(opt => {
-                 const isSelected = opt.id === detail.selectedOptionId;
-                 const isCorrect = opt.id === detail.correctOptionId;
-                 let style = "text-slate-500 dark:text-slate-400";
-                 let icon = null;
-
-                 if (isCorrect) {
-                   style = "text-green-700 dark:text-green-400 font-bold bg-green-50 dark:bg-green-900/20 px-2 py-1 rounded -ml-2";
-                   icon = <CheckCircle size={16} className="inline mr-2"/>;
-                 } else if (isSelected && !isCorrect) {
-                   style = "text-red-600 dark:text-red-400 font-medium line-through decoration-red-600/50 bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded -ml-2";
-                   icon = <XCircle size={16} className="inline mr-2"/>;
-                 }
-
-                 return (
-                   <div key={opt.id} className={`${style} flex items-center text-sm`}>
-                     {icon} {opt.text}
-                   </div>
-                 );
-               })}
-             </div>
-           </div>
-         ))}
-       </div>
-    </div>
-  );
-};
-
 // --- Layout & Router ---
 
 const FabMenu = ({ onAction }: { onAction: (action: 'manual' | 'camera') => void }) => {
   const [isOpen, setIsOpen] = useState(false);
 
   // Clases para animación de botones hijos: salen desde la posición del botón padre
-  const btnCommon = "absolute left-1/2 -translate-x-1/2 w-12 h-12 rounded-full shadow-lg flex items-center justify-center border border-slate-200 dark:border-slate-600 transition-all duration-300 ease-out";
-  
-  // Posiciones: 
-  // Manual: arriba a la izquierda (-50px, -60px) -> Simplificaremos a Vertical para que sea "detrás" como pediste
-  // El usuario pidió: "desplazarse a su posición". Vamos a hacer que salgan verticalmente hacia arriba.
+  const btnCommon = "absolute left-1/2 -translate-x-1/2 w-12 h-12 rounded-full shadow-lg flex items-center justify-center border border-slate-200 dark:border-slate-600 transition-all duration-300 ease-out z-[60]";
   
   return (
     <div className="relative -top-6 h-16 w-16 flex justify-center items-center">
@@ -1060,16 +1099,16 @@ const FabMenu = ({ onAction }: { onAction: (action: 'manual' | 'camera') => void
        {/* Botón Manual */}
        <button 
          onClick={() => { setIsOpen(false); onAction('manual'); }}
-         className={`${btnCommon} ${isOpen ? '-translate-y-[85px] opacity-100' : 'translate-y-0 opacity-0 pointer-events-none'} bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-slate-600 z-0`}
+         className={`${btnCommon} ${isOpen ? '-translate-y-[90px] opacity-100' : 'translate-y-0 opacity-0 pointer-events-none'} bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-slate-600`}
        >
          <PenTool size={20} />
          <span className={`absolute top-full mt-1 bg-white/80 dark:bg-slate-800/80 backdrop-blur px-2 rounded text-[10px] font-bold text-slate-600 dark:text-slate-300 transition-opacity duration-300 ${isOpen ? 'opacity-100' : 'opacity-0'}`}>Manual</span>
        </button>
 
-       {/* Botón Escanear */}
+       {/* Botón Escanear - Más separado */}
        <button 
          onClick={() => { setIsOpen(false); onAction('camera'); }}
-         className={`${btnCommon} ${isOpen ? '-translate-y-[150px] opacity-100' : 'translate-y-0 opacity-0 pointer-events-none'} bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-slate-600 z-0`}
+         className={`${btnCommon} ${isOpen ? '-translate-y-[180px] opacity-100' : 'translate-y-0 opacity-0 pointer-events-none'} bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-slate-600`}
        >
          <Camera size={20} />
          <span className={`absolute top-full mt-1 bg-white/80 dark:bg-slate-800/80 backdrop-blur px-2 rounded text-[10px] font-bold text-slate-600 dark:text-slate-300 transition-opacity duration-300 ${isOpen ? 'opacity-100' : 'opacity-0'}`}>Escanear</span>
@@ -1079,7 +1118,7 @@ const FabMenu = ({ onAction }: { onAction: (action: 'manual' | 'camera') => void
        <button 
          onClick={() => setIsOpen(!isOpen)} 
          className={`
-           relative z-10 w-16 h-16 rounded-full shadow-xl flex items-center justify-center transition-all duration-300
+           relative z-[60] w-16 h-16 rounded-full shadow-xl flex items-center justify-center transition-all duration-300
            ${isOpen ? 'bg-slate-800 dark:bg-slate-600 rotate-45 scale-90' : 'bg-brand-600 hover:scale-105 hover:bg-brand-700'}
            text-white
          `}
@@ -1087,9 +1126,9 @@ const FabMenu = ({ onAction }: { onAction: (action: 'manual' | 'camera') => void
          <Plus size={32} />
        </button>
        
-       {/* Overlay para cerrar al hacer click fuera */}
+       {/* Overlay para cerrar al hacer click fuera - FIXED para no afectar a la nav bar */}
        {isOpen && (
-         <div className="fixed inset-0 z-[-1] bg-black/10 backdrop-blur-[1px]" onClick={() => setIsOpen(false)}></div>
+         <div className="fixed inset-0 z-[50] bg-black/10 backdrop-blur-[1px]" onClick={() => setIsOpen(false)}></div>
        )}
     </div>
   );
@@ -1109,8 +1148,8 @@ const Layout = ({ children, user }: { children?: React.ReactNode, user: User }) 
         {children}
       </main>
       
-      <nav className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 fixed bottom-0 left-0 right-0 z-50 shadow-lg pb-safe">
-        <div className="max-w-md mx-auto flex justify-around items-center h-16 px-4 relative">
+      <nav className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 fixed bottom-0 left-0 right-0 z-40 shadow-lg pb-safe">
+        <div className="max-w-md mx-auto flex justify-around items-center h-16 px-4 relative z-50">
           <button 
             onClick={() => navigate('/')} 
             className={`flex flex-col items-center p-2 rounded-xl transition-colors w-16 ${location.pathname === '/' ? 'text-brand-600 bg-brand-50 dark:bg-slate-800 dark:text-brand-400' : 'text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300'}`}
