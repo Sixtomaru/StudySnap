@@ -5,8 +5,6 @@ const generateId = () => Math.random().toString(36).substring(2, 9);
 
 export const parseFileToQuiz = async (base64Data: string, mimeType: string): Promise<Question[]> => {
   // CORRECCIÓN CRÍTICA: Acceso directo a process.env.API_KEY
-  // Vite sustituye esta cadena por tu clave real al compilar.
-  // La comprobación anterior (typeof process !== 'undefined') fallaba en navegadores.
   const apiKey = process.env.API_KEY;
 
   if (!apiKey) {
@@ -26,8 +24,11 @@ export const parseFileToQuiz = async (base64Data: string, mimeType: string): Pro
   `;
 
   try {
+    // CAMBIO IMPORTANTE: Usamos 'gemini-3-flash-preview' en lugar de 'pro'.
+    // El modelo Flash es mucho más rápido y tiene límites de cuota gratuitos mucho más altos,
+    // evitando el error 429 que estabas recibiendo.
     const response: GenerateContentResponse = await ai.models.generateContent({
-      model: "gemini-3-pro-preview",
+      model: "gemini-3-flash-preview",
       contents: {
         parts: [
           {
@@ -106,10 +107,9 @@ export const parseFileToQuiz = async (base64Data: string, mimeType: string): Pro
   } catch (error: any) {
     console.error("Gemini Error Completo:", error);
     
-    // Convertimos el error a string asegurándonos de capturar todo el detalle
     const errorStr = JSON.stringify(error, Object.getOwnPropertyNames(error)) + " " + String(error);
 
-    // Detección robusta del error de API Key
+    // 1. Error de Clave
     if (errorStr.includes("API_KEY_INVALID") || errorStr.includes("API key not valid") || errorStr.includes("400")) {
       throw new Error(
         "❌ CLAVE API RECHAZADA\n\n" +
@@ -119,8 +119,16 @@ export const parseFileToQuiz = async (base64Data: string, mimeType: string): Pro
         "3. ¿Está habilitada la 'Generative Language API' en tu proyecto de Google?"
       );
     }
+
+    // 2. Error de Cuota (429) - El que tenías
+    if (errorStr.includes("429") || errorStr.includes("quota") || errorStr.includes("exhausted")) {
+        throw new Error(
+            "⚠️ LÍMITE DE USO GRATUITO\n\n" +
+            "Has hecho demasiadas peticiones seguidas a Google en poco tiempo.\n" +
+            "Espera unos instantes y vuelve a intentarlo."
+        );
+    }
     
-    // Propagar mensaje original si no es de API Key
     throw new Error(error.message || "Ocurrió un error al procesar el archivo con la IA.");
   }
 };
