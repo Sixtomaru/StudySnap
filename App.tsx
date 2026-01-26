@@ -31,7 +31,8 @@ import {
   Sun,
   Upload,
   Share2,
-  Download
+  Download,
+  Menu
 } from 'lucide-react';
 import { signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { auth, googleProvider } from './services/firebaseConfig';
@@ -170,21 +171,23 @@ const SettingsPage = () => {
   const navigate = useNavigate();
 
   return (
-    <div className="pb-24 max-w-lg mx-auto p-4">
-      <header className="flex items-center gap-2 mb-8">
+    <div className="pb-24 max-w-lg mx-auto p-4 animate-in fade-in zoom-in-95 duration-300">
+      <header className="flex items-center gap-2 mb-8 md:hidden">
          <button onClick={() => navigate('/')} className="p-2 hover:bg-white/50 rounded-full text-slate-700 dark:text-slate-300"><ArrowLeft /></button>
          <h1 className="font-bold text-2xl text-slate-800 dark:text-white">Opciones</h1>
       </header>
 
+      <h1 className="hidden md:block font-bold text-3xl text-slate-800 dark:text-white mb-8">Configuración</h1>
+
       <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
-        <div className="p-4 flex items-center justify-between border-b border-slate-100 dark:border-slate-700">
-           <div className="flex items-center gap-3">
-             <div className="bg-brand-50 dark:bg-slate-700 p-2 rounded-lg text-brand-600 dark:text-brand-400">
+        <div className="p-6 flex items-center justify-between border-b border-slate-100 dark:border-slate-700">
+           <div className="flex items-center gap-4">
+             <div className="bg-brand-50 dark:bg-slate-700 p-3 rounded-xl text-brand-600 dark:text-brand-400">
                {isDark ? <Moon size={24} /> : <Sun size={24} />}
              </div>
              <div>
-               <h3 className="font-medium text-slate-800 dark:text-white">Modo Oscuro</h3>
-               <p className="text-xs text-slate-500 dark:text-slate-400">Cambiar la apariencia de la aplicación</p>
+               <h3 className="font-bold text-lg text-slate-800 dark:text-white">Modo Oscuro</h3>
+               <p className="text-sm text-slate-500 dark:text-slate-400">Cambiar entre tema claro y oscuro</p>
              </div>
            </div>
            
@@ -197,7 +200,7 @@ const SettingsPage = () => {
         </div>
       </div>
       
-      <p className="text-center text-slate-400 text-xs mt-8">StudySnap v1.0</p>
+      <p className="text-center text-slate-400 text-xs mt-8">StudySnap v1.0 • Hecho con IA</p>
     </div>
   );
 };
@@ -338,11 +341,11 @@ const HomePage = ({ user }: { user: User }) => {
   }
 
   return (
-    <div className="space-y-8 pb-24 max-w-7xl mx-auto w-full">
-      <header className="flex justify-between items-center bg-white/80 dark:bg-slate-800/80 backdrop-blur-md p-4 rounded-2xl shadow-sm border border-white/50 dark:border-slate-700">
-        <div className="flex items-center gap-3">
-          <div className="bg-brand-100 dark:bg-slate-700 p-2 rounded-full hidden sm:block border border-brand-200 dark:border-slate-600">
-            <UserIcon className="text-brand-600 dark:text-brand-400" />
+    <div className="space-y-8 pb-24 md:pb-8 w-full animate-in fade-in zoom-in-95 duration-300">
+      <header className="flex justify-between items-center bg-white/80 dark:bg-slate-800/80 backdrop-blur-md p-6 rounded-2xl shadow-sm border border-white/50 dark:border-slate-700">
+        <div className="flex items-center gap-4">
+          <div className="bg-brand-100 dark:bg-slate-700 p-3 rounded-full border border-brand-200 dark:border-slate-600 shadow-sm">
+            <UserIcon className="text-brand-600 dark:text-brand-400 w-6 h-6" />
           </div>
           <div>
             <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Mis Listas</h1>
@@ -350,7 +353,7 @@ const HomePage = ({ user }: { user: User }) => {
           </div>
         </div>
         
-        <div className="flex gap-2">
+        <div className="flex gap-2 md:hidden">
            <button 
              onClick={() => navigate('/settings')}
              className="p-2 text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 rounded-full transition-colors"
@@ -377,31 +380,33 @@ const HomePage = ({ user }: { user: User }) => {
             <FileText size={40} className="text-slate-300 dark:text-slate-500" />
           </div>
           <h2 className="text-xl font-semibold text-slate-600 dark:text-slate-300 mb-2">No tienes listas guardadas</h2>
-          <p className="text-slate-500 dark:text-slate-400">Pulsa el botón + para empezar.</p>
+          <p className="text-slate-500 dark:text-slate-400">Usa el botón + para escanear tu primer test.</p>
         </div>
       ) : (
-        <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4">
           {tests.map(test => (
-            <Card key={test.id} onClick={() => navigate(`/quiz/${test.id}`)} className="bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 hover:border-brand-200 dark:hover:border-brand-700 hover:shadow-md transition-all cursor-pointer h-full flex flex-col justify-between">
+            <Card key={test.id} onClick={() => navigate(`/quiz/${test.id}`)} className="bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 hover:border-brand-200 dark:hover:border-brand-700 hover:shadow-lg transition-all cursor-pointer h-full flex flex-col justify-between group">
               <div>
-                <div className="flex justify-between items-start mb-3">
-                  <div className="bg-brand-50 dark:bg-slate-700 p-2 rounded-lg text-brand-600 dark:text-brand-400 border border-brand-100 dark:border-slate-600">
-                    <FileText size={20}/>
+                <div className="flex justify-between items-start mb-4">
+                  <div className="bg-brand-50 dark:bg-slate-700 p-3 rounded-xl text-brand-600 dark:text-brand-400 border border-brand-100 dark:border-slate-600">
+                    <FileText size={24}/>
                   </div>
-                  <div className="flex gap-1">
-                    <button onClick={(e) => handleShare(e, test.id)} className="text-slate-300 hover:text-brand-500 p-1.5 hover:bg-brand-50 dark:hover:bg-slate-700 rounded-md transition-colors" title="Compartir">
+                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button onClick={(e) => handleShare(e, test.id)} className="text-slate-300 hover:text-brand-500 p-2 hover:bg-brand-50 dark:hover:bg-slate-700 rounded-lg transition-colors" title="Compartir">
                       <Share2 size={18} />
                     </button>
-                    <button onClick={(e) => handleDelete(e, test.id)} className="text-slate-300 hover:text-red-500 p-1.5 hover:bg-red-50 dark:hover:bg-slate-700 rounded-md transition-colors" title="Borrar">
+                    <button onClick={(e) => handleDelete(e, test.id)} className="text-slate-300 hover:text-red-500 p-2 hover:bg-red-50 dark:hover:bg-slate-700 rounded-lg transition-colors" title="Borrar">
                       <Trash2 size={18} />
                     </button>
                   </div>
                 </div>
-                <h3 className="font-bold text-lg text-slate-800 dark:text-slate-100 line-clamp-2 mb-1">{test.title}</h3>
-                <div className="text-sm text-slate-500 dark:text-slate-400 mb-4">{test.questions.length} preguntas</div>
+                <h3 className="font-bold text-xl text-slate-800 dark:text-slate-100 line-clamp-2 mb-2 group-hover:text-brand-600 transition-colors">{test.title}</h3>
+                <div className="text-sm text-slate-500 dark:text-slate-400 mb-4 flex items-center gap-2">
+                    <Badge color="blue">{test.questions.length} preguntas</Badge>
+                </div>
               </div>
               
-              <div className="flex gap-2 mt-auto pt-4 border-t border-slate-100 dark:border-slate-700">
+              <div className="flex gap-3 mt-auto pt-4 border-t border-slate-100 dark:border-slate-700">
                  <Button 
                     variant="secondary" 
                     className="flex-1 text-sm py-2 dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600"
@@ -409,7 +414,7 @@ const HomePage = ({ user }: { user: User }) => {
                  >
                    Editar
                  </Button>
-                 <Button variant="primary" className="flex-1 text-sm py-2 flex justify-center items-center gap-1 shadow-md shadow-brand-200 dark:shadow-none">
+                 <Button variant="primary" className="flex-1 text-sm py-2 flex justify-center items-center gap-2 shadow-md shadow-brand-200 dark:shadow-none">
                    <Play size={16} /> Jugar
                  </Button>
               </div>
@@ -420,6 +425,8 @@ const HomePage = ({ user }: { user: User }) => {
     </div>
   );
 };
+
+// ... EditorPage, QuizPage (sin cambios mayores, se adaptan por CSS) ...
 
 const EditorPage = ({ user }: { user: User }) => {
   const navigate = useNavigate();
@@ -434,6 +441,7 @@ const EditorPage = ({ user }: { user: User }) => {
   const [currentQIndex, setCurrentQIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [progressMsg, setProgressMsg] = useState('');
+  const [progressPercent, setProgressPercent] = useState(0); 
   const [showListSelector, setShowListSelector] = useState(false);
   const [viewMode, setViewMode] = useState<'editor' | 'scanner'>(modeParam === 'camera' ? 'scanner' : 'editor');
 
@@ -446,8 +454,6 @@ const EditorPage = ({ user }: { user: User }) => {
         if (test && test.userId === user.uid) {
           setTitle(test.title);
           setQuestions(test.questions);
-          // Si venimos de cámara, activamos vista de escáner.
-          // Si es manual, activamos vista editor y vamos a la 1ª pregunta.
           if (modeParam === 'camera') {
             setViewMode('scanner');
           } else {
@@ -474,31 +480,30 @@ const EditorPage = ({ user }: { user: User }) => {
     if (!file) return;
 
     setIsLoading(true);
-    setProgressMsg("Subiendo documento...");
+    setProgressMsg("Iniciando...");
+    setProgressPercent(0);
     
-    // Simulación de progreso
-    const progressInterval = setInterval(() => {
-        setProgressMsg(p => p === "Subiendo documento..." ? "Analizando con IA..." : (p === "Analizando con IA..." ? "Extrayendo preguntas..." : "Casi listo..."));
-    }, 2000);
-
     const reader = new FileReader();
     reader.onloadend = async () => {
       try {
         const base64String = (reader.result as string).split(',')[1];
-        const extractedQuestions = await parseFileToQuiz(base64String, file.type, (msg) => setProgressMsg(msg));
-        
+        const extractedQuestions = await parseFileToQuiz(
+            base64String, 
+            file.type, 
+            (msg, percent) => {
+                setProgressMsg(msg);
+                setProgressPercent(percent);
+            }
+        );
         setQuestions(prev => [...prev, ...extractedQuestions]);
-        
-        // Mantenernos en modo escáner, mostrando la lista abajo
         setViewMode('scanner');
-        clearInterval(progressInterval);
 
       } catch (err: any) {
         alert(err.message);
       } finally {
-        clearInterval(progressInterval);
         setIsLoading(false);
         setProgressMsg('');
+        setProgressPercent(0);
         e.target.value = '';
       }
     };
@@ -506,7 +511,6 @@ const EditorPage = ({ user }: { user: User }) => {
   };
 
   const getCurrentQuestion = (): Question => {
-    // Para modo editor, si estamos en el final, es nueva
     if (currentQIndex === questions.length) {
       return {
         id: generateId(),
@@ -545,22 +549,16 @@ const EditorPage = ({ user }: { user: User }) => {
     if (direction === 'prev') {
       if (currentQIndex > 0) setCurrentQIndex(prev => prev - 1);
     } else {
-      // Permitir ir al índice questions.length (nueva pregunta)
       if (currentQIndex < questions.length) setCurrentQIndex(prev => prev + 1);
       else {
-        // Estamos en la nueva, si tiene texto, creamos otra nueva (movemos índice)
         const current = getCurrentQuestion();
         if(current.text.trim()) setCurrentQIndex(prev => prev + 1);
       }
     }
   };
 
-  // Funciones de navegación extra
+  // Helpers
   const goToFirst = () => setCurrentQIndex(0);
-  const goToLast = () => {
-      // Si la última pregunta está vacía (modo añadir), vamos a la anterior válida, o al final
-      if (questions.length > 0) setCurrentQIndex(questions.length - 1);
-  };
   const goToPagePrompt = () => {
     const page = prompt(`Ir a pregunta (1 - ${questions.length + 1}):`);
     if (page) {
@@ -573,21 +571,16 @@ const EditorPage = ({ user }: { user: User }) => {
 
   const handleSave = async () => {
     if (!title.trim()) return alert("Escribe un título para la lista.");
-    
-    // Filtrar preguntas vacías
     const validQuestions = questions.filter(q => q.text.trim() !== '');
     if (validQuestions.length === 0) return alert("Añade al menos una pregunta.");
     
-    // Validar respuestas vacías
     const emptyOptionIndex = questions.findIndex(q => q.text.trim() !== '' && q.options.some(o => !o.text.trim()));
     if (emptyOptionIndex !== -1) {
-        // IMPORTANTE: Cambiamos a modo editor y vamos a la pregunta
         setViewMode('editor');
         setCurrentQIndex(emptyOptionIndex);
         return alert(`La pregunta ${emptyOptionIndex + 1} tiene respuestas vacías.`);
     }
 
-    // Validar respuesta correcta marcada
     const missingAnswerIndex = questions.findIndex(q => q.text.trim() !== '' && !q.correctOptionId);
     if (missingAnswerIndex !== -1) {
         setViewMode('editor');
@@ -597,6 +590,7 @@ const EditorPage = ({ user }: { user: User }) => {
 
     setIsLoading(true);
     setProgressMsg("Guardando...");
+    setProgressPercent(100);
     
     try {
       const test: Test = {
@@ -606,7 +600,6 @@ const EditorPage = ({ user }: { user: User }) => {
         createdAt: Date.now(),
         questions: validQuestions
       };
-
       await storageService.saveTest(test); 
       navigate('/');
     } catch (error: any) {
@@ -624,7 +617,6 @@ const EditorPage = ({ user }: { user: User }) => {
     } else if (newTitle) {
       setTitle(newTitle);
       setQuestions([]);
-      // Si es cámara, vamos directo a scanner mode
       if (modeParam === 'camera') setViewMode('scanner');
       else {
         setViewMode('editor');
@@ -634,56 +626,43 @@ const EditorPage = ({ user }: { user: User }) => {
     }
   };
 
-  // Botón para editar pregunta específica desde el modo escáner
   const editQuestionFromList = (index: number) => {
     setViewMode('editor');
     setCurrentQIndex(index);
   }
 
-  // Añadir pregunta manual nueva
   const addNewQuestionManual = () => {
      setViewMode('editor');
-     setCurrentQIndex(questions.length); // Ir al final (nueva)
+     setCurrentQIndex(questions.length); 
   }
 
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center h-screen bg-slate-50 dark:bg-slate-900 z-50 fixed inset-0">
-        <Loader2 className="animate-spin text-brand-600 mb-4" size={48} />
-        <p className="text-slate-600 dark:text-slate-300 font-bold text-lg mb-2">{progressMsg || "Procesando..."}</p>
-        <div className="w-64 h-2 bg-slate-200 rounded-full overflow-hidden">
-           <div className="h-full bg-brand-500 animate-pulse w-full origin-left"></div>
+      <div className="flex flex-col items-center justify-center h-screen bg-white/90 dark:bg-slate-900/90 backdrop-blur z-50 fixed inset-0">
+        <div className="w-full max-w-xs text-center">
+            <Loader2 className="animate-spin text-brand-600 mb-6 mx-auto" size={48} />
+            <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">{progressMsg || "Procesando..."}</h3>
+            <p className="text-slate-500 text-sm mb-6">Esto puede tardar unos segundos...</p>
+            <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-4 overflow-hidden shadow-inner border border-slate-300 dark:border-slate-600">
+               <div className="bg-brand-500 h-full rounded-full transition-all duration-500 ease-out relative overflow-hidden" style={{ width: `${progressPercent}%` }}>
+                  <div className="absolute inset-0 bg-white/20 animate-[pulse_2s_infinite]"></div>
+               </div>
+            </div>
+            <div className="text-right text-xs font-bold text-brand-600 dark:text-brand-400 mt-2">{progressPercent}%</div>
         </div>
       </div>
     );
   }
 
   const activeQ = getCurrentQuestion();
-  
-  // Total pages display logic:
-  // Si estamos editando una existente: index + 1 / total
-  // Si estamos en la "fantasma" (nueva): total + 1 / total + 1
   const displayTotal = currentQIndex === questions.length ? questions.length + 1 : questions.length;
   const displayIndex = currentQIndex + 1;
 
   return (
-    <div className="pb-24 max-w-4xl mx-auto">
-      {showListSelector && (
-        <ListSelectionModal 
-          user={user} 
-          onSelect={onListSelectFinal} 
-          onCancel={() => navigate('/')} 
-        />
-      )}
+    <div className="pb-24 md:pb-8 max-w-4xl mx-auto w-full">
+      {showListSelector && <ListSelectionModal user={user} onSelect={onListSelectFinal} onCancel={() => navigate('/')} />}
 
-      <input 
-        id="file-upload-trigger" 
-        type="file" 
-        className="hidden" 
-        // Solo archivos e imágenes en PC (navegador gestiona cámara si es móvil)
-        accept="image/*,application/pdf" 
-        onChange={handleFileUpload} 
-      />
+      <input id="file-upload-trigger" type="file" className="hidden" accept="image/*,application/pdf" onChange={handleFileUpload} />
 
       <header className="sticky top-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur z-20 py-4 border-b border-slate-200 dark:border-slate-800 mb-6 flex justify-between items-center px-4 -mx-4 shadow-sm">
         <div className="flex items-center gap-2">
@@ -692,12 +671,7 @@ const EditorPage = ({ user }: { user: User }) => {
              <span className="text-xs text-slate-400 dark:text-slate-500 font-bold uppercase">
                {viewMode === 'scanner' ? 'Modo Escáner' : 'Editor Manual'}
              </span>
-             <input 
-                value={title}
-                onChange={e => setTitle(e.target.value)}
-                placeholder="Título de la lista..."
-                className="font-bold text-slate-800 dark:text-white bg-transparent focus:outline-none focus:border-b-2 border-brand-500 w-32 sm:w-auto placeholder:text-slate-300"
-             />
+             <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Título de la lista..." className="font-bold text-slate-800 dark:text-white bg-transparent focus:outline-none focus:border-b-2 border-brand-500 w-32 sm:w-auto placeholder:text-slate-300"/>
            </div>
         </div>
         <div className="flex gap-2">
@@ -706,7 +680,6 @@ const EditorPage = ({ user }: { user: User }) => {
                   <Camera size={20} className="text-slate-600 dark:text-slate-300"/>
                </Button>
              )}
-            
             <div className="flex flex-col items-center">
                 <span className="text-[10px] font-bold text-brand-600 dark:text-brand-400 uppercase tracking-wider mb-1">Guardar</span>
                 <Button onClick={handleSave} className="w-12 h-12 rounded-full p-0 flex items-center justify-center shadow-lg shadow-brand-200 dark:shadow-none bg-brand-600 hover:bg-brand-700">
@@ -736,7 +709,6 @@ const EditorPage = ({ user }: { user: User }) => {
                 </button>
               </div>
            </div>
-
            {questions.length > 0 && (
              <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
                 <div className="p-4 bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 font-bold text-slate-500 dark:text-slate-400 text-sm uppercase">
@@ -748,7 +720,6 @@ const EditorPage = ({ user }: { user: User }) => {
                        <span className="font-bold text-slate-300 dark:text-slate-600 group-hover:text-brand-500">{idx + 1}.</span>
                        <div className="flex-1">
                           <p className="text-sm font-medium text-slate-800 dark:text-slate-200 line-clamp-2">{q.text}</p>
-                          <span className="text-xs text-slate-400">{q.options.length} opciones {q.correctOptionId ? '• Respuesta marcada' : '• Sin respuesta'}</span>
                        </div>
                        <ChevronRight size={16} className="text-slate-300 self-center"/>
                     </div>
@@ -762,26 +733,22 @@ const EditorPage = ({ user }: { user: User }) => {
       {/* --- VISTA EDITOR MANUAL --- */}
       {viewMode === 'editor' && (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
-          
           <div className="flex justify-between items-center bg-white dark:bg-slate-800 p-2 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 mb-4">
              <div className="flex gap-1">
-                 <Button variant="ghost" onClick={goToFirst} disabled={currentQIndex === 0} className="px-2 dark:text-slate-400 dark:hover:bg-slate-700" title="Ir al principio">
+                 <Button variant="ghost" onClick={goToFirst} disabled={currentQIndex === 0} className="px-2 dark:text-slate-400 dark:hover:bg-slate-700">
                    <ChevronsLeft size={20} />
                  </Button>
                  <Button variant="ghost" onClick={() => navigateQuestion('prev')} disabled={currentQIndex === 0} className="px-2 dark:text-slate-300 dark:hover:bg-slate-700">
                    <ChevronLeft size={20} />
                  </Button>
              </div>
-             
              <button onClick={goToPagePrompt} className="font-mono font-bold text-slate-500 dark:text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 px-2 py-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
                {displayIndex} <span className="text-slate-300 dark:text-slate-600">/</span> {displayTotal}
              </button>
-  
              <div className="flex gap-1">
                  <Button variant="ghost" onClick={() => navigateQuestion('next')} disabled={currentQIndex === questions.length} className="px-2 text-brand-600 dark:text-brand-400 dark:hover:bg-slate-700">
                    <ChevronRight size={20} />
                  </Button>
-                 {/* Nuevo Botón + a la derecha */}
                  <Button variant="secondary" onClick={addNewQuestionManual} className="px-2 ml-1 border-l border-slate-200 dark:border-slate-600 rounded-none rounded-r-lg" title="Nueva Pregunta">
                     <Plus size={20} className="text-brand-600 dark:text-brand-400"/>
                  </Button>
@@ -791,73 +758,31 @@ const EditorPage = ({ user }: { user: User }) => {
           <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-md border border-slate-200 dark:border-slate-700 p-6 relative min-h-[400px]">
               <div className="mb-6">
                 <label className="block text-xs uppercase text-slate-400 dark:text-slate-500 font-bold mb-2">Pregunta</label>
-                <TextArea 
-                  value={activeQ.text} 
-                  onChange={e => updateCurrentQuestion('text', e.target.value)} 
-                  placeholder="Escribe la pregunta aquí..."
-                  className="text-lg bg-slate-50 dark:bg-slate-900 dark:text-white dark:border-slate-700 border-slate-200 min-h-[100px] focus:bg-white dark:focus:bg-slate-800 transition-colors"
-                />
+                <TextArea value={activeQ.text} onChange={e => updateCurrentQuestion('text', e.target.value)} placeholder="Escribe la pregunta aquí..." className="text-lg bg-slate-50 dark:bg-slate-900 dark:text-white dark:border-slate-700 border-slate-200 min-h-[100px] focus:bg-white dark:focus:bg-slate-800 transition-colors"/>
               </div>
-  
               <div className="space-y-3">
                 <label className="block text-xs uppercase text-slate-400 dark:text-slate-500 font-bold mb-2">Respuestas (Marca la correcta)</label>
                 {activeQ.options.map((opt, oIndex) => (
                   <div key={opt.id} className="flex items-center gap-3 group">
-                    <button 
-                      onClick={() => setCorrectOption(opt.id)}
-                      className={`flex-shrink-0 w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all ${activeQ.correctOptionId === opt.id ? 'border-green-500 bg-green-500 text-white shadow-md shadow-green-200 dark:shadow-none' : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-transparent hover:border-slate-400'}`}
-                    >
+                    <button onClick={() => setCorrectOption(opt.id)} className={`flex-shrink-0 w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all ${activeQ.correctOptionId === opt.id ? 'border-green-500 bg-green-500 text-white shadow-md shadow-green-200 dark:shadow-none' : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-transparent hover:border-slate-400'}`}>
                       <CheckCircle size={18} fill="currentColor" className={activeQ.correctOptionId === opt.id ? 'text-white' : ''} />
                     </button>
                     <div className="flex-1 relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-xs font-bold">
-                         {String.fromCharCode(65 + oIndex)}
-                      </span>
-                      <Input 
-                        value={opt.text} 
-                        onChange={e => updateOption(oIndex, e.target.value)} 
-                        placeholder={`Opción ${oIndex + 1}`}
-                        className="pl-8 py-3 bg-slate-50 dark:bg-slate-900 dark:text-white dark:border-slate-700 border-slate-200 focus:bg-white dark:focus:bg-slate-800 transition-colors shadow-sm"
-                      />
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-xs font-bold">{String.fromCharCode(65 + oIndex)}</span>
+                      <Input value={opt.text} onChange={e => updateOption(oIndex, e.target.value)} placeholder={`Opción ${oIndex + 1}`} className="pl-8 py-3 bg-slate-50 dark:bg-slate-900 dark:text-white dark:border-slate-700 border-slate-200 focus:bg-white dark:focus:bg-slate-800 transition-colors shadow-sm"/>
                     </div>
-                    <button 
-                       onClick={() => {
-                          const newOptions = activeQ.options.filter((_, i) => i !== oIndex);
-                          updateCurrentQuestion('options', newOptions);
-                       }}
-                       className="text-slate-300 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
+                    <button onClick={() => { const newOptions = activeQ.options.filter((_, i) => i !== oIndex); updateCurrentQuestion('options', newOptions); }} className="text-slate-300 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity">
                       <XCircle size={20} />
                     </button>
                   </div>
                 ))}
-                
-                <button 
-                  onClick={() => {
-                     const newOpt = { id: generateId(), text: '' };
-                     updateCurrentQuestion('options', [...activeQ.options, newOpt]);
-                  }}
-                  className="mt-2 text-sm font-medium text-brand-600 dark:text-brand-400 hover:text-brand-700 flex items-center gap-1 px-2 py-1 rounded hover:bg-brand-50 dark:hover:bg-slate-700 transition-colors w-fit"
-                >
+                <button onClick={() => { const newOpt = { id: generateId(), text: '' }; updateCurrentQuestion('options', [...activeQ.options, newOpt]); }} className="mt-2 text-sm font-medium text-brand-600 dark:text-brand-400 hover:text-brand-700 flex items-center gap-1 px-2 py-1 rounded hover:bg-brand-50 dark:hover:bg-slate-700 transition-colors w-fit">
                   <Plus size={16}/> Añadir otra opción
                 </button>
               </div>
-              
               {activeQ.id && currentQIndex < questions.length && (
                  <div className="absolute top-4 right-4">
-                    <button 
-                      onClick={() => {
-                         if(confirm("¿Borrar esta pregunta?")) {
-                            const newQs = questions.filter((_, i) => i !== currentQIndex);
-                            setQuestions(newQs);
-                            // Si borramos la última, vamos a la anterior
-                            if(currentQIndex >= newQs.length) setCurrentQIndex(Math.max(0, newQs.length - 1));
-                         }
-                      }}
-                      className="text-slate-300 hover:text-red-500 p-2 hover:bg-red-50 rounded-full"
-                    >
-                      <Trash2 size={20}/>
-                    </button>
+                    <button onClick={() => { if(confirm("¿Borrar esta pregunta?")) { const newQs = questions.filter((_, i) => i !== currentQIndex); setQuestions(newQs); if(currentQIndex >= newQs.length) setCurrentQIndex(Math.max(0, newQs.length - 1)); } }} className="text-slate-300 hover:text-red-500 p-2 hover:bg-red-50 rounded-full"><Trash2 size={20}/></button>
                  </div>
               )}
           </div>
@@ -886,10 +811,7 @@ const QuizPage = ({ user }: { user: User }) => {
       if (loadedTest) {
         setTest(loadedTest);
         const shuffled = [...loadedTest.questions].sort(() => Math.random() - 0.5);
-        const fullyShuffled = shuffled.map(q => ({
-          ...q,
-          options: [...q.options].sort(() => Math.random() - 0.5)
-        }));
+        const fullyShuffled = shuffled.map(q => ({ ...q, options: [...q.options].sort(() => Math.random() - 0.5) }));
         setQuestions(fullyShuffled);
       }
       setLoading(false);
@@ -900,20 +822,12 @@ const QuizPage = ({ user }: { user: User }) => {
   const handleOptionSelect = (optId: string) => {
     if (isAnswerChecked) return;
     setSelectedOptionId(optId);
-    
     setIsAnswerChecked(true);
     const currentQ = questions[currentIndex];
     const isCorrect = optId === currentQ.correctOptionId;
-    
     if (isCorrect) setScore(prev => prev + 1);
-
     setAnswers(prev => [...prev, {
-      questionId: currentQ.id,
-      questionText: currentQ.text,
-      selectedOptionId: optId,
-      correctOptionId: currentQ.correctOptionId,
-      options: currentQ.options,
-      isCorrect
+      questionId: currentQ.id, questionText: currentQ.text, selectedOptionId: optId, correctOptionId: currentQ.correctOptionId, options: currentQ.options, isCorrect
     }]);
   };
 
@@ -929,16 +843,7 @@ const QuizPage = ({ user }: { user: User }) => {
 
   const finishQuiz = async () => {
     if (!test) return;
-    const result: TestResult = {
-      id: generateId(),
-      userId: user.uid,
-      testId: test.id,
-      testTitle: test.title,
-      date: Date.now(),
-      score: score,
-      totalQuestions: answers.length,
-      details: answers
-    };
+    const result: TestResult = { id: generateId(), userId: user.uid, testId: test.id, testTitle: test.title, date: Date.now(), score: score, totalQuestions: answers.length, details: answers };
     await storageService.saveResult(result);
     navigate(`/history/${result.id}`, { replace: true });
   };
@@ -960,12 +865,10 @@ const QuizPage = ({ user }: { user: User }) => {
         <button onClick={finishQuiz} className="text-brand-600 dark:text-brand-400 font-bold text-sm hover:underline">Terminar</button>
       </header>
 
-      {/* Aplicar scrollbar-hide aquí */}
       <div className="flex-1 overflow-y-auto scrollbar-hide p-1">
         <Card className="mb-6 border-l-4 border-l-brand-500 shadow-lg bg-white dark:bg-slate-800 dark:border-none">
            <h2 className="text-xl md:text-2xl font-bold text-slate-800 dark:text-white leading-relaxed">{currentQ.text}</h2>
         </Card>
-
         <div className="space-y-3">
           {currentQ.options.map((opt, index) => {
             let stateStyle = "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-300";
@@ -984,29 +887,20 @@ const QuizPage = ({ user }: { user: User }) => {
             } else if (selectedOptionId === opt.id) {
                stateStyle = "border-brand-500 bg-brand-50 dark:bg-brand-900/20";
             }
-
             return (
-              <div 
-                key={opt.id}
-                onClick={() => handleOptionSelect(opt.id)}
-                className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex items-center gap-4 shadow-sm ${stateStyle}`}
-              >
-                {icon}
-                <span className="font-medium text-slate-700 dark:text-slate-200 text-lg">{opt.text}</span>
+              <div key={opt.id} onClick={() => handleOptionSelect(opt.id)} className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex items-center gap-4 shadow-sm ${stateStyle}`}>
+                {icon} <span className="font-medium text-slate-700 dark:text-slate-200 text-lg">{opt.text}</span>
               </div>
             );
           })}
         </div>
       </div>
-
       <div className="mt-6 pt-4 border-t border-slate-200/50 dark:border-slate-700">
         {isAnswerChecked ? (
            <Button onClick={handleNext} className="w-full py-4 text-xl shadow-xl shadow-brand-500/20 dark:shadow-none rounded-2xl animate-in slide-in-from-bottom-2">
              {currentIndex === questions.length - 1 ? 'Ver Resultados' : 'Siguiente Pregunta'}
            </Button>
-        ) : (
-          <div className="text-center text-slate-400 text-sm font-medium animate-pulse">Selecciona tu respuesta...</div>
-        )}
+        ) : ( <div className="text-center text-slate-400 text-sm font-medium animate-pulse">Selecciona tu respuesta...</div> )}
       </div>
     </div>
   );
@@ -1018,74 +912,50 @@ const HistoryPage = ({ user }: { user: User }) => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const load = async () => {
+    const loadResults = async () => {
       const data = await storageService.getResults(user.uid);
       setResults(data);
       setLoading(false);
     };
-    load();
+    loadResults();
   }, [user]);
 
-  const handleDelete = async (e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
-    if (confirm("¿Borrar este resultado?")) {
-      await storageService.deleteResult(id);
-      setResults(prev => prev.filter(r => r.id !== id));
+  const handleDeleteAll = async () => {
+    if (confirm("¿Estás seguro de querer borrar todo el historial?")) {
+       await storageService.deleteAllResults(user.uid);
+       setResults([]);
     }
   };
 
-  const handleClearHistory = async () => {
-    if (confirm("¿Borrar TODO el historial?")) {
-        await storageService.deleteAllResults(user.uid);
-        setResults([]);
-    }
-  };
-
-  if (loading) return <div className="flex justify-center pt-20"><Loader2 className="animate-spin text-brand-500"/></div>;
+  if (loading) return <div className="flex justify-center py-20"><Loader2 className="animate-spin text-brand-500" /></div>;
 
   return (
-    <div className="pb-24 max-w-4xl mx-auto">
+    <div className="pb-24 md:pb-8 max-w-2xl mx-auto animate-in fade-in zoom-in-95 duration-300">
       <header className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Historial</h1>
-        {results.length > 0 && (
-            <button onClick={handleClearHistory} className="text-red-400 hover:text-red-500 text-sm font-medium">
-                Borrar todo
-            </button>
-        )}
+        {results.length > 0 && <button onClick={handleDeleteAll} className="text-red-500 text-sm hover:underline">Borrar todo</button>}
       </header>
-
       {results.length === 0 ? (
-        <div className="text-center py-20 bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700">
-           <div className="bg-slate-100 dark:bg-slate-700 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-              <HistoryIcon size={32} className="text-slate-400 dark:text-slate-500" />
-           </div>
-           <p className="text-slate-500 dark:text-slate-400">Aún no has completado ningún test.</p>
+        <div className="text-center py-20 text-slate-400">
+           <HistoryIcon size={48} className="mx-auto mb-4 opacity-50"/>
+           <p>No hay resultados recientes.</p>
         </div>
       ) : (
         <div className="space-y-4">
-          {results.map(r => (
-            <div key={r.id} onClick={() => navigate(`/history/${r.id}`)} className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-100 dark:border-slate-700 shadow-sm hover:shadow-md transition-all cursor-pointer flex justify-between items-center group">
-               <div>
-                  <h3 className="font-bold text-slate-800 dark:text-white">{r.testTitle}</h3>
-                  <div className="text-xs text-slate-500 dark:text-slate-400 flex gap-2 mt-1">
-                     <span>{new Date(r.date).toLocaleDateString()}</span>
-                     <span>•</span>
-                     <span className={r.score === r.totalQuestions ? "text-green-500 font-bold" : "text-slate-500"}>
-                        {r.score}/{r.totalQuestions} aciertos
-                     </span>
-                  </div>
-               </div>
-               <div className="flex items-center gap-3">
-                  <div className={`text-lg font-bold ${r.score === r.totalQuestions ? 'text-green-500' : 'text-brand-600 dark:text-brand-400'}`}>
-                    {Math.round((r.score / r.totalQuestions) * 100)}%
-                  </div>
-                  <button onClick={(e) => handleDelete(e, r.id)} className="p-2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Trash2 size={18} />
-                  </button>
-                  <ChevronRight size={18} className="text-slate-300"/>
-               </div>
-            </div>
-          ))}
+           {results.map(r => (
+             <div key={r.id} onClick={() => navigate(`/history/${r.id}`)} className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-100 dark:border-slate-700 flex justify-between items-center cursor-pointer hover:shadow-md transition-all">
+                <div>
+                   <h3 className="font-bold text-slate-700 dark:text-slate-200">{r.testTitle}</h3>
+                   <p className="text-xs text-slate-500 dark:text-slate-400">{new Date(r.date).toLocaleDateString()} • {new Date(r.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
+                </div>
+                <div className="text-right">
+                   <div className={`text-xl font-bold ${r.score === r.totalQuestions ? 'text-green-500' : 'text-brand-600 dark:text-brand-400'}`}>
+                     {Math.round((r.score / r.totalQuestions) * 100)}%
+                   </div>
+                   <div className="text-xs text-slate-400">{r.score}/{r.totalQuestions}</div>
+                </div>
+             </div>
+           ))}
         </div>
       )}
     </div>
@@ -1093,176 +963,193 @@ const HistoryPage = ({ user }: { user: User }) => {
 };
 
 const ResultViewPage = ({ user }: { user: User }) => {
-    const { id } = useParams();
-    const navigate = useNavigate();
-    const [result, setResult] = useState<TestResult | undefined>(undefined);
-    const [loading, setLoading] = useState(true);
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const [result, setResult] = useState<TestResult | undefined>(undefined);
+  const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        const load = async () => {
-            if(!id) return;
-            const r = await storageService.getResultById(id);
-            setResult(r);
-            setLoading(false);
-        }
-        load();
-    }, [id]);
+  useEffect(() => {
+    const load = async () => {
+      if (id) {
+        const data = await storageService.getResultById(id);
+        setResult(data);
+      }
+      setLoading(false);
+    };
+    load();
+  }, [id]);
 
-    if(loading) return <div className="flex justify-center pt-20"><Loader2 className="animate-spin text-brand-500"/></div>;
-    if(!result) return <div className="text-center pt-20">Resultado no encontrado.</div>;
+  if (loading) return <div className="flex justify-center py-20"><Loader2 className="animate-spin text-brand-500" /></div>;
+  if (!result) return <div>Resultado no encontrado.</div>;
+  const percentage = Math.round((result.score / result.totalQuestions) * 100);
 
-    const percentage = Math.round((result.score / result.totalQuestions) * 100);
+  return (
+    <div className="pb-24 md:pb-8 max-w-2xl mx-auto">
+      <header className="flex items-center gap-2 mb-6">
+        <button onClick={() => navigate('/history')} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-slate-600 dark:text-slate-300"><ArrowLeft /></button>
+        <h1 className="text-xl font-bold text-slate-800 dark:text-white truncate flex-1">{result.testTitle}</h1>
+      </header>
+      
+      <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 mb-6 text-center shadow-sm border border-slate-100 dark:border-slate-700">
+         <div className="text-sm text-slate-500 uppercase font-bold tracking-wider mb-2">Puntuación Final</div>
+         <div className={`text-5xl font-black mb-2 ${percentage >= 80 ? 'text-green-500' : percentage >= 50 ? 'text-brand-600' : 'text-red-500'}`}>
+            {percentage}%
+         </div>
+         <div className="text-slate-400 text-sm">
+           Has acertado {result.score} de {result.totalQuestions} preguntas
+         </div>
+      </div>
 
-    return (
-        <div className="pb-24 max-w-3xl mx-auto">
-            <header className="flex items-center gap-2 mb-6">
-                <button onClick={() => navigate('/history')} className="p-2 hover:bg-white dark:hover:bg-slate-800 rounded-full text-slate-500 dark:text-slate-400"><ArrowLeft /></button>
-                <h1 className="font-bold text-xl text-slate-800 dark:text-white">Resultados: {result.testTitle}</h1>
-            </header>
-
-            <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 mb-8 text-center">
-                <div className="text-sm text-slate-500 dark:text-slate-400 uppercase font-bold tracking-wider mb-2">Puntuación Final</div>
-                <div className="text-5xl font-black text-brand-600 dark:text-brand-400 mb-2">{percentage}%</div>
-                <div className="text-slate-600 dark:text-slate-300">
-                    Has acertado <strong>{result.score}</strong> de <strong>{result.totalQuestions}</strong> preguntas.
-                </div>
-            </div>
-
-            <div className="space-y-6">
-                {result.details.map((detail, idx) => (
-                    <div key={idx} className={`bg-white dark:bg-slate-800 rounded-xl border-l-4 p-4 shadow-sm ${detail.isCorrect ? 'border-l-green-500' : 'border-l-red-500'}`}>
-                        <div className="flex gap-3 mb-3">
-                           <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${detail.isCorrect ? 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400'}`}>
-                             {detail.isCorrect ? <CheckCircle size={14}/> : <XCircle size={14}/>}
-                           </div>
-                           <h3 className="font-bold text-slate-800 dark:text-slate-200">{detail.questionText}</h3>
-                        </div>
-
-                        <div className="space-y-2 pl-9">
-                            {detail.options.map(opt => {
-                                let style = "border-slate-200 dark:border-slate-700 opacity-60";
-                                let icon = null;
-
-                                if (opt.id === detail.selectedOptionId) {
-                                    if (detail.isCorrect) {
-                                        style = "border-green-500 bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-200 opacity-100";
-                                    } else {
-                                        style = "border-red-500 bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200 opacity-100";
-                                    }
-                                } else if (opt.id === detail.correctOptionId) {
-                                     // Mostrar la correcta si falló
-                                     if (!detail.isCorrect) {
-                                         style = "border-green-500 bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-200 opacity-100";
-                                     }
-                                }
-
-                                return (
-                                    <div key={opt.id} className={`p-3 rounded-lg border text-sm flex justify-between ${style}`}>
-                                        <span>{opt.text}</span>
-                                        {opt.id === detail.selectedOptionId && (detail.isCorrect ? <CheckCircle size={16}/> : <XCircle size={16}/>)}
-                                        {opt.id === detail.correctOptionId && !detail.isCorrect && <CheckCircle size={16}/>}
-                                    </div>
-                                );
-                            })}
-                        </div>
+      <div className="space-y-6">
+        {result.details.map((detail, idx) => (
+          <div key={idx} className="bg-white dark:bg-slate-800 rounded-xl p-4 border border-slate-100 dark:border-slate-700">
+             <div className="flex gap-3 mb-3">
+               <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white ${detail.isCorrect ? 'bg-green-500' : 'bg-red-500'}`}>
+                 {detail.isCorrect ? <CheckCircle size={14} /> : <XCircle size={14} />}
+               </div>
+               <p className="font-medium text-slate-800 dark:text-slate-200 text-sm leading-relaxed">{detail.questionText}</p>
+             </div>
+             
+             <div className="pl-9 space-y-2">
+                {detail.options.map(opt => {
+                  const isSelected = opt.id === detail.selectedOptionId;
+                  const isCorrect = opt.id === detail.correctOptionId;
+                  let style = "border-slate-100 dark:border-slate-700 opacity-50";
+                  if (isCorrect) style = "border-green-200 bg-green-50 text-green-800 dark:bg-green-900/20 dark:text-green-300 dark:border-green-800 opacity-100";
+                  else if (isSelected && !isCorrect) style = "border-red-200 bg-red-50 text-red-800 dark:bg-red-900/20 dark:text-red-300 dark:border-red-800 opacity-100";
+                  return (
+                    <div key={opt.id} className={`text-sm p-2 rounded-lg border ${style}`}>
+                       {opt.text}
+                       {isCorrect && <span className="ml-2 font-bold text-xs">✓ Correcta</span>}
+                       {isSelected && !isCorrect && <span className="ml-2 font-bold text-xs">✗ Tu respuesta</span>}
                     </div>
-                ))}
-            </div>
-        </div>
-    );
+                  );
+                })}
+             </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 };
 
 // --- Layout & Router ---
 
 const FabMenu = ({ onAction }: { onAction: (action: 'manual' | 'camera') => void }) => {
   const [isOpen, setIsOpen] = useState(false);
-
-  // Clases para animación de botones hijos: salen desde la posición del botón padre
   const btnCommon = "absolute left-1/2 -translate-x-1/2 w-12 h-12 rounded-full shadow-lg flex items-center justify-center border border-slate-200 dark:border-slate-600 transition-all duration-300 ease-out z-[60]";
   
   return (
     <div className="relative -top-6 h-16 w-16 flex justify-center items-center">
-       
-       {/* Botón Manual */}
-       <button 
-         onClick={() => { setIsOpen(false); onAction('manual'); }}
-         className={`${btnCommon} ${isOpen ? '-translate-y-[90px] opacity-100' : 'translate-y-0 opacity-0 pointer-events-none'} bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-slate-600`}
-       >
-         <PenTool size={20} />
-         <span className={`absolute top-full mt-1 bg-white/80 dark:bg-slate-800/80 backdrop-blur px-2 rounded text-[10px] font-bold text-slate-600 dark:text-slate-300 transition-opacity duration-300 ${isOpen ? 'opacity-100' : 'opacity-0'}`}>Manual</span>
+       <button onClick={() => { setIsOpen(false); onAction('manual'); }} className={`${btnCommon} ${isOpen ? '-translate-y-[90px] opacity-100' : 'translate-y-0 opacity-0 pointer-events-none'} bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-slate-600`}>
+         <PenTool size={20} /> <span className={`absolute top-full mt-1 bg-white/80 dark:bg-slate-800/80 backdrop-blur px-2 rounded text-[10px] font-bold text-slate-600 dark:text-slate-300 transition-opacity duration-300 ${isOpen ? 'opacity-100' : 'opacity-0'}`}>Manual</span>
        </button>
-
-       {/* Botón Escanear - Más separado */}
-       <button 
-         onClick={() => { setIsOpen(false); onAction('camera'); }}
-         className={`${btnCommon} ${isOpen ? '-translate-y-[180px] opacity-100' : 'translate-y-0 opacity-0 pointer-events-none'} bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-slate-600`}
-       >
-         <Camera size={20} />
-         <span className={`absolute top-full mt-1 bg-white/80 dark:bg-slate-800/80 backdrop-blur px-2 rounded text-[10px] font-bold text-slate-600 dark:text-slate-300 transition-opacity duration-300 ${isOpen ? 'opacity-100' : 'opacity-0'}`}>Escanear</span>
+       <button onClick={() => { setIsOpen(false); onAction('camera'); }} className={`${btnCommon} ${isOpen ? '-translate-y-[180px] opacity-100' : 'translate-y-0 opacity-0 pointer-events-none'} bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-slate-600`}>
+         <Camera size={20} /> <span className={`absolute top-full mt-1 bg-white/80 dark:bg-slate-800/80 backdrop-blur px-2 rounded text-[10px] font-bold text-slate-600 dark:text-slate-300 transition-opacity duration-300 ${isOpen ? 'opacity-100' : 'opacity-0'}`}>Escanear</span>
        </button>
-
-       {/* Botón Principal (+) */}
-       <button 
-         onClick={() => setIsOpen(!isOpen)} 
-         className={`
-           relative z-[60] w-16 h-16 rounded-full shadow-xl flex items-center justify-center transition-all duration-300
-           ${isOpen ? 'bg-slate-800 dark:bg-slate-600 rotate-45 scale-90' : 'bg-brand-600 hover:scale-105 hover:bg-brand-700'}
-           text-white
-         `}
-       >
-         <Plus size={32} />
-       </button>
-       
-       {/* Overlay para cerrar al hacer click fuera - FIXED para no afectar a la nav bar */}
-       {isOpen && (
-         <div className="fixed inset-0 z-[50] bg-black/10 backdrop-blur-[1px]" onClick={() => setIsOpen(false)}></div>
-       )}
+       <button onClick={() => setIsOpen(!isOpen)} className={`relative z-[60] w-16 h-16 rounded-full shadow-xl flex items-center justify-center transition-all duration-300 ${isOpen ? 'bg-slate-800 dark:bg-slate-600 rotate-45 scale-90' : 'bg-brand-600 hover:scale-105 hover:bg-brand-700'} text-white`}> <Plus size={32} /> </button>
+       {isOpen && <div className="fixed inset-0 z-[50] bg-black/10 backdrop-blur-[1px]" onClick={() => setIsOpen(false)}></div>}
     </div>
   );
 };
+
+const SidebarItem = ({ icon, label, active, onClick }: any) => (
+  <button onClick={onClick} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium ${active ? 'bg-brand-50 text-brand-600 dark:bg-slate-800 dark:text-brand-400 shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900 dark:hover:bg-slate-800 dark:text-slate-400'}`}>
+    {icon} <span>{label}</span>
+  </button>
+);
+
+const DesktopSidebar = ({ user, onAction }: { user: User, onAction: (a: 'manual'|'camera') => void }) => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const isActive = (path: string) => location.pathname === path || (path !== '/' && location.pathname.startsWith(path));
+
+  return (
+    <aside className="hidden md:flex flex-col w-72 h-screen fixed left-0 top-0 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 p-6 z-50">
+      <div className="flex items-center gap-3 mb-10 px-2">
+         <div className="bg-gradient-to-tr from-brand-600 to-indigo-500 p-2.5 rounded-xl text-white shadow-lg shadow-brand-500/30">
+            <FileText size={24} />
+         </div>
+         <h1 className="font-bold text-2xl text-slate-800 dark:text-white tracking-tight">StudySnap</h1>
+      </div>
+
+      <Button onClick={() => onAction('camera')} className="w-full mb-8 flex items-center justify-center gap-2 shadow-lg shadow-brand-500/20 py-4 text-base font-bold bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-700 hover:to-indigo-700 transition-all transform hover:scale-[1.02]">
+         <Plus size={20} /> Nuevo Test
+      </Button>
+
+      <nav className="space-y-2 flex-1">
+         <SidebarItem icon={<HomeIcon size={20} />} label="Inicio" active={location.pathname === '/'} onClick={() => navigate('/')} />
+         <SidebarItem icon={<HistoryIcon size={20} />} label="Historial" active={location.pathname.startsWith('/history')} onClick={() => navigate('/history')} />
+         <SidebarItem icon={<Settings size={20} />} label="Configuración" active={location.pathname === '/settings'} onClick={() => navigate('/settings')} />
+      </nav>
+
+      <div className="pt-6 border-t border-slate-100 dark:border-slate-800 mt-auto">
+         <div className="flex items-center gap-3 px-2 mb-4 bg-slate-50 dark:bg-slate-800 p-3 rounded-xl">
+            <div className="w-10 h-10 rounded-full bg-brand-100 dark:bg-slate-700 flex items-center justify-center text-brand-600 dark:text-brand-400 font-bold border border-brand-200 dark:border-slate-600">
+               {user.displayName?.charAt(0) || 'U'}
+            </div>
+            <div className="overflow-hidden">
+               <p className="text-sm font-bold text-slate-700 dark:text-slate-200 truncate">{user.displayName}</p>
+               <p className="text-xs text-slate-400 truncate">{user.email}</p>
+            </div>
+         </div>
+         <button onClick={() => signOut(auth)} className="flex items-center gap-2 text-slate-500 hover:text-red-500 text-sm px-4 py-2 w-full rounded-lg hover:bg-red-50 dark:hover:bg-slate-800 transition-colors font-medium">
+            <LogOut size={18} /> Cerrar Sesión
+         </button>
+      </div>
+    </aside>
+  );
+}
 
 const Layout = ({ children, user }: { children?: React.ReactNode, user: User }) => {
   const location = useLocation();
   const navigate = useNavigate();
   
   if (location.pathname.startsWith('/quiz/')) {
-    return <div className="max-w-4xl mx-auto min-h-screen p-4">{children}</div>;
+    // Modo Quiz inmersivo (pantalla completa)
+    return <div className="max-w-5xl mx-auto min-h-screen p-4 md:p-8 animate-in zoom-in-95 duration-300">{children}</div>;
   }
 
   return (
-    <div className="w-full min-h-screen flex flex-col">
-      <main className="flex-1 p-4 w-full">
-        {children}
-      </main>
-      
-      <nav className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 fixed bottom-0 left-0 right-0 z-40 shadow-lg pb-safe">
-        <div className="max-w-md mx-auto flex justify-around items-center h-16 px-4 relative z-50">
-          <button 
-            onClick={() => navigate('/')} 
-            className={`flex flex-col items-center p-2 rounded-xl transition-colors w-16 ${location.pathname === '/' ? 'text-brand-600 bg-brand-50 dark:bg-slate-800 dark:text-brand-400' : 'text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300'}`}
-          >
-            <HomeIcon size={24} />
-            <span className="text-[10px] font-bold mt-1">Inicio</span>
-          </button>
-          
-          <FabMenu onAction={(action) => navigate(`/editor?mode=${action}`)} />
-          
-          <button 
-            onClick={() => navigate('/history')} 
-            className={`flex flex-col items-center p-2 rounded-xl transition-colors w-16 ${location.pathname.startsWith('/history') ? 'text-brand-600 bg-brand-50 dark:bg-slate-800 dark:text-brand-400' : 'text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300'}`}
-          >
-            <HistoryIcon size={24} />
-            <span className="text-[10px] font-bold mt-1">Historial</span>
-          </button>
-        </div>
-      </nav>
+    <div className="w-full min-h-screen flex bg-slate-50/50 dark:bg-slate-900/50">
+      {/* Sidebar para PC (>= md) */}
+      <DesktopSidebar user={user} onAction={(action) => navigate(`/editor?mode=${action}`)} />
+
+      <div className="flex-1 flex flex-col md:pl-72 transition-all duration-300">
+        <main className="flex-1 p-4 md:p-8 w-full max-w-7xl mx-auto">
+          {children}
+        </main>
+        
+        {/* Barra Inferior para Móvil (< md) */}
+        <nav className="md:hidden bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 fixed bottom-0 left-0 right-0 z-40 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] pb-safe">
+          <div className="max-w-md mx-auto flex justify-around items-center h-16 px-4 relative z-50">
+            <button 
+              onClick={() => navigate('/')} 
+              className={`flex flex-col items-center p-2 rounded-xl transition-colors w-16 ${location.pathname === '/' ? 'text-brand-600 bg-brand-50 dark:bg-slate-800 dark:text-brand-400' : 'text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300'}`}
+            >
+              <HomeIcon size={24} />
+              <span className="text-[10px] font-bold mt-1">Inicio</span>
+            </button>
+            
+            <FabMenu onAction={(action) => navigate(`/editor?mode=${action}`)} />
+            
+            <button 
+              onClick={() => navigate('/history')} 
+              className={`flex flex-col items-center p-2 rounded-xl transition-colors w-16 ${location.pathname.startsWith('/history') ? 'text-brand-600 bg-brand-50 dark:bg-slate-800 dark:text-brand-400' : 'text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300'}`}
+            >
+              <HistoryIcon size={24} />
+              <span className="text-[10px] font-bold mt-1">Historial</span>
+            </button>
+          </div>
+        </nav>
+      </div>
     </div>
   );
 };
 
 const App = () => {
   const { user, loading } = useAuth();
-  const { isDark } = useDarkMode(); // Initialize dark mode hook
+  const { isDark } = useDarkMode(); 
 
   if (loading) {
      return <div className="h-screen flex items-center justify-center bg-brand-50 dark:bg-slate-900"><Loader2 className="animate-spin text-brand-500" size={32}/></div>;
