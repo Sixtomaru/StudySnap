@@ -8,6 +8,9 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react()],
+    build: {
+      target: 'esnext' // IMPORTANTE: Esto permite "Top-level await" y soluciona el error de build
+    },
     define: {
       // INTELIGENTE:
       // 1. Intenta leer 'env.API_KEY' (Tu archivo .env local)
