@@ -29,7 +29,9 @@ import {
   Settings,
   Moon,
   Sun,
-  Upload
+  Upload,
+  Share2,
+  Download
 } from 'lucide-react';
 import { signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { auth, googleProvider } from './services/firebaseConfig';
@@ -200,6 +202,63 @@ const SettingsPage = () => {
   );
 };
 
+const SharePage = ({ user }: { user: User }) => {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const [test, setTest] = useState<Test | undefined>(undefined);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      if(!id) return;
+      const t = await storageService.getTestById(id);
+      setTest(t);
+      setLoading(false);
+    }
+    load();
+  }, [id]);
+
+  const handleImport = async () => {
+     if(!id) return;
+     try {
+       await storageService.copyTest(id, user.uid);
+       alert("Lista importada correctamente!");
+       navigate('/');
+     } catch(e) {
+       alert("Error al importar la lista.");
+     }
+  }
+
+  if(loading) return <div className="flex justify-center h-screen items-center"><Loader2 className="animate-spin text-brand-500"/></div>;
+  
+  if(!test) return (
+    <div className="flex flex-col items-center justify-center h-screen p-4 text-center">
+      <XCircle size={48} className="text-red-400 mb-4"/>
+      <h2 className="text-xl font-bold">Lista no encontrada</h2>
+      <p className="text-slate-500 mt-2">El enlace puede ser incorrecto o la lista fue eliminada.</p>
+      <Button onClick={() => navigate('/')} className="mt-6">Ir al Inicio</Button>
+    </div>
+  );
+
+  return (
+    <div className="flex flex-col items-center justify-center h-screen p-6 text-center max-w-md mx-auto">
+       <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-xl w-full border border-slate-100 dark:border-slate-700">
+          <div className="bg-brand-100 dark:bg-slate-700 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
+             <Download size={32} className="text-brand-600 dark:text-brand-400"/>
+          </div>
+          <h1 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">Importar Lista</h1>
+          <p className="text-slate-500 dark:text-slate-400 mb-6">
+            ¿Quieres añadir <strong>"{test.title}"</strong> ({test.questions.length} preguntas) a tu colección?
+          </p>
+          <div className="flex gap-3">
+             <Button variant="secondary" onClick={() => navigate('/')} className="flex-1 dark:bg-slate-700 dark:text-white dark:border-slate-600">Cancelar</Button>
+             <Button onClick={handleImport} className="flex-1">Importar</Button>
+          </div>
+       </div>
+    </div>
+  );
+};
+
 const LoginPage = () => {
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -262,6 +321,17 @@ const HomePage = ({ user }: { user: User }) => {
       setTests(prev => prev.filter(t => t.id !== id));
     }
   };
+  
+  const handleShare = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    const url = `${window.location.origin}/#/share/${id}`;
+    try {
+       await navigator.clipboard.writeText(url);
+       alert("Enlace copiado al portapapeles! Envíaselo a quien quieras.");
+    } catch(err) {
+       alert("No se pudo copiar: " + url);
+    }
+  }
 
   const handleLogout = () => {
     if(confirm("¿Cerrar sesión?")) signOut(auth);
@@ -318,9 +388,14 @@ const HomePage = ({ user }: { user: User }) => {
                   <div className="bg-brand-50 dark:bg-slate-700 p-2 rounded-lg text-brand-600 dark:text-brand-400 border border-brand-100 dark:border-slate-600">
                     <FileText size={20}/>
                   </div>
-                  <button onClick={(e) => handleDelete(e, test.id)} className="text-slate-300 hover:text-red-500 p-1.5 hover:bg-red-50 dark:hover:bg-slate-700 rounded-md transition-colors">
-                    <Trash2 size={18} />
-                  </button>
+                  <div className="flex gap-1">
+                    <button onClick={(e) => handleShare(e, test.id)} className="text-slate-300 hover:text-brand-500 p-1.5 hover:bg-brand-50 dark:hover:bg-slate-700 rounded-md transition-colors" title="Compartir">
+                      <Share2 size={18} />
+                    </button>
+                    <button onClick={(e) => handleDelete(e, test.id)} className="text-slate-300 hover:text-red-500 p-1.5 hover:bg-red-50 dark:hover:bg-slate-700 rounded-md transition-colors" title="Borrar">
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
                 </div>
                 <h3 className="font-bold text-lg text-slate-800 dark:text-slate-100 line-clamp-2 mb-1">{test.title}</h3>
                 <div className="text-sm text-slate-500 dark:text-slate-400 mb-4">{test.questions.length} preguntas</div>
@@ -346,227 +421,6 @@ const HomePage = ({ user }: { user: User }) => {
   );
 };
 
-const HistoryPage = ({ user }: { user: User }) => {
-  const [results, setResults] = useState<TestResult[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectionMode, setSelectionMode] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const navigate = useNavigate();
-  const longPressTimer = useRef<any>(null);
-  const isLongPress = useRef(false);
-
-  useEffect(() => {
-    loadResults();
-  }, [user]);
-
-  const loadResults = async () => {
-    setLoading(true);
-    const data = await storageService.getResults(user.uid);
-    setResults(data);
-    setLoading(false);
-  };
-
-  const handlePointerDown = (id: string) => {
-    isLongPress.current = false;
-    longPressTimer.current = setTimeout(() => {
-      isLongPress.current = true;
-      setSelectionMode(true);
-      setSelectedIds(prev => new Set(prev).add(id));
-    }, 600); 
-  };
-
-  const handlePointerUp = () => {
-    if (longPressTimer.current) clearTimeout(longPressTimer.current);
-  };
-
-  const handleClick = (id: string, e: React.MouseEvent) => {
-    if (isLongPress.current) {
-      isLongPress.current = false;
-      return; 
-    }
-
-    if (selectionMode) {
-      const newSet = new Set(selectedIds);
-      if (newSet.has(id)) newSet.delete(id);
-      else newSet.add(id);
-      
-      setSelectedIds(newSet);
-      if (newSet.size === 0) setSelectionMode(false);
-    } else {
-      navigate(`/history/${id}`);
-    }
-  };
-
-  const handleDeleteSelected = async () => {
-    if (!confirm(`¿Eliminar ${selectedIds.size} resultados?`)) return;
-    try {
-      await Promise.all(Array.from(selectedIds).map(id => storageService.deleteResult(id)));
-      const newResults = results.filter(r => !selectedIds.has(r.id));
-      setResults(newResults);
-      setSelectionMode(false);
-      setSelectedIds(new Set());
-    } catch (e) {
-      alert("Error al eliminar.");
-    }
-  };
-
-  const handleDeleteAll = async () => {
-    if (!confirm("¿Borrar TODO el historial? Esta acción no se puede deshacer.")) return;
-    try {
-      setLoading(true);
-      await storageService.deleteAllResults(user.uid);
-      setResults([]);
-    } catch(e) {
-      alert("Error borrando el historial.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (loading) return <div className="flex justify-center py-10"><Loader2 className="animate-spin text-brand-500" /></div>;
-
-  return (
-    <div className="space-y-6 pb-24 max-w-5xl mx-auto">
-      <div className="flex justify-between items-center bg-white/80 dark:bg-slate-800/80 backdrop-blur p-4 rounded-2xl border border-white/50 dark:border-slate-700">
-         <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Historial</h1>
-         {selectionMode && (
-           <div className="flex gap-2">
-             <Button variant="danger" onClick={handleDeleteSelected} className="text-sm px-3">
-               Borrar ({selectedIds.size})
-             </Button>
-             <Button variant="secondary" onClick={() => { setSelectionMode(false); setSelectedIds(new Set()); }} className="text-sm px-3 dark:bg-slate-700 dark:text-white">
-               Cancelar
-             </Button>
-           </div>
-         )}
-         {!selectionMode && results.length > 0 && (
-            <Button variant="ghost" onClick={handleDeleteAll} className="text-red-500 hover:bg-red-50 dark:hover:bg-slate-700">
-              Borrar Todo
-            </Button>
-         )}
-      </div>
-      
-      {results.length === 0 ? (
-        <p className="text-slate-500 dark:text-slate-400 text-center py-20">Aún no has realizado ningún test.</p>
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {results.map(result => (
-            <div 
-              key={result.id}
-              onPointerDown={() => handlePointerDown(result.id)}
-              onPointerUp={handlePointerUp}
-              onPointerLeave={handlePointerUp} 
-              onClick={(e) => handleClick(result.id, e)}
-              className={`
-                bg-white dark:bg-slate-800 rounded-xl shadow-sm border p-4 cursor-pointer transition-all select-none
-                ${selectionMode && selectedIds.has(result.id) ? 'ring-2 ring-brand-500 bg-brand-50 dark:bg-brand-900 border-brand-500' : 'border-slate-100 dark:border-slate-700 hover:shadow-md hover:border-slate-300 dark:hover:border-slate-600'}
-              `}
-            >
-              <div className="flex justify-between items-start">
-                <div className="flex items-start gap-3">
-                   {selectionMode && (
-                     <div className={`mt-1 ${selectedIds.has(result.id) ? 'text-brand-600 dark:text-brand-400' : 'text-slate-300 dark:text-slate-600'}`}>
-                       {selectedIds.has(result.id) ? <CheckSquare size={20}/> : <Square size={20}/>}
-                     </div>
-                   )}
-                   <div>
-                      <h3 className="font-semibold text-slate-800 dark:text-slate-100 line-clamp-1">{result.testTitle}</h3>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">{new Date(result.date).toLocaleDateString()} {new Date(result.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
-                   </div>
-                </div>
-                <div className="text-right">
-                  <div className={`text-xl font-bold ${result.score / result.totalQuestions >= 0.5 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                    {Math.round((result.score / result.totalQuestions) * 100)}%
-                  </div>
-                  <div className="text-xs text-slate-400 dark:text-slate-500">{result.score}/{result.totalQuestions}</div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-};
-
-const ResultViewPage = ({ user }: { user: User }) => {
-  const { id } = useParams();
-  const navigate = useNavigate();
-  const [result, setResult] = useState<TestResult | undefined>(undefined);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const load = async () => {
-      if (!id) return;
-      setLoading(true);
-      const res = await storageService.getResultById(id);
-      if (res && res.userId === user.uid) {
-        setResult(res);
-      }
-      setLoading(false);
-    };
-    load();
-  }, [id, user]);
-
-  if (loading) return <div className="flex justify-center py-20"><Loader2 className="animate-spin text-brand-500" /></div>;
-  if (!result) return <div className="text-center py-20 text-slate-500">Resultado no encontrado o no tienes permiso para verlo.</div>;
-
-  return (
-    <div className="pb-24 max-w-3xl mx-auto p-4">
-       <header className="flex items-center gap-2 mb-6">
-          <button onClick={() => navigate('/history')} className="p-2 hover:bg-white/50 rounded-full text-slate-700 dark:text-slate-300"><ArrowLeft /></button>
-          <h1 className="font-bold text-xl text-slate-800 dark:text-white">Detalles del Resultado</h1>
-       </header>
-
-       <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 mb-6 text-center">
-          <p className="text-slate-500 dark:text-slate-400 text-sm uppercase tracking-wider font-bold mb-1">{result.testTitle}</p>
-          <div className={`text-5xl font-bold mb-2 ${result.score / result.totalQuestions >= 0.5 ? 'text-green-500' : 'text-red-500'}`}>
-             {Math.round((result.score / result.totalQuestions) * 100)}%
-          </div>
-          <p className="text-slate-600 dark:text-slate-300">
-            Has acertado <span className="font-bold">{result.score}</span> de <span className="font-bold">{result.totalQuestions}</span>
-          </p>
-          <p className="text-xs text-slate-400 mt-2">{new Date(result.date).toLocaleString()}</p>
-       </div>
-
-       <div className="space-y-4">
-          {result.details.map((detail, index) => (
-            <div key={index} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 p-4">
-               <div className="flex gap-3 mb-3">
-                  <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${detail.isCorrect ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                    {index + 1}
-                  </div>
-                  <p className="font-medium text-slate-800 dark:text-slate-200">{detail.questionText}</p>
-               </div>
-               
-               <div className="pl-9 space-y-2">
-                  {detail.options.map(opt => {
-                     let style = "border-slate-100 dark:border-slate-700 text-slate-500 dark:text-slate-400 opacity-60";
-                     let icon = null;
-
-                     if (opt.id === detail.correctOptionId) {
-                        style = "border-green-200 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 font-medium";
-                        icon = <CheckCircle size={14} className="text-green-600 dark:text-green-400" />;
-                     } else if (opt.id === detail.selectedOptionId && !detail.isCorrect) {
-                        style = "border-red-200 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 font-medium";
-                        icon = <XCircle size={14} className="text-red-600 dark:text-red-400" />;
-                     }
-
-                     return (
-                       <div key={opt.id} className={`p-2 rounded-lg border text-sm flex justify-between items-center ${style}`}>
-                          <span>{opt.text}</span>
-                          {icon}
-                       </div>
-                     );
-                  })}
-               </div>
-            </div>
-          ))}
-       </div>
-    </div>
-  );
-};
-
 const EditorPage = ({ user }: { user: User }) => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -579,23 +433,26 @@ const EditorPage = ({ user }: { user: User }) => {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentQIndex, setCurrentQIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+  const [progressMsg, setProgressMsg] = useState('');
   const [showListSelector, setShowListSelector] = useState(false);
-  
+  const [viewMode, setViewMode] = useState<'editor' | 'scanner'>(modeParam === 'camera' ? 'scanner' : 'editor');
+
   // Inicialización
   useEffect(() => {
     const init = async () => {
-      // 1. Si editamos un test existente por URL ID
       if (editId) {
         setIsLoading(true);
         const test = await storageService.getTestById(editId);
         if (test && test.userId === user.uid) {
           setTitle(test.title);
           setQuestions(test.questions);
-          // Ir al final para añadir más si venimos de cámara
+          // Si venimos de cámara, activamos vista de escáner.
+          // Si es manual, activamos vista editor y vamos a la 1ª pregunta.
           if (modeParam === 'camera') {
-            setCurrentQIndex(test.questions.length);
+            setViewMode('scanner');
           } else {
-            setCurrentQIndex(0); // Si es manual o edición normal, empezamos al principio
+            setViewMode('editor');
+            setCurrentQIndex(0);
           }
         } else {
            alert("Error al cargar test.");
@@ -605,7 +462,6 @@ const EditorPage = ({ user }: { user: User }) => {
         return;
       }
 
-      // 2. Si venimos de "Nuevo" (Manual o Escáner) SIN ID, pedimos lista primero
       if (modeParam && !editId) {
         setShowListSelector(true);
       }
@@ -618,27 +474,31 @@ const EditorPage = ({ user }: { user: User }) => {
     if (!file) return;
 
     setIsLoading(true);
+    setProgressMsg("Subiendo documento...");
+    
+    // Simulación de progreso
+    const progressInterval = setInterval(() => {
+        setProgressMsg(p => p === "Subiendo documento..." ? "Analizando con IA..." : (p === "Analizando con IA..." ? "Extrayendo preguntas..." : "Casi listo..."));
+    }, 2000);
+
     const reader = new FileReader();
     reader.onloadend = async () => {
       try {
         const base64String = (reader.result as string).split(',')[1];
-        const extractedQuestions = await parseFileToQuiz(base64String, file.type);
+        const extractedQuestions = await parseFileToQuiz(base64String, file.type, (msg) => setProgressMsg(msg));
         
-        setQuestions(prev => {
-           return [...prev, ...extractedQuestions];
-        });
+        setQuestions(prev => [...prev, ...extractedQuestions]);
         
-        // CORRECCIÓN: Ir a la última pregunta añadida (la 8 si añadimos 3 a 5), no a una vacía.
-        // Si hay nuevas preguntas, ponemos el índice en la última de las nuevas.
-        if (extractedQuestions.length > 0) {
-           setCurrentQIndex(prev => Math.max(0, prev + extractedQuestions.length - 1));
-        }
+        // Mantenernos en modo escáner, mostrando la lista abajo
+        setViewMode('scanner');
+        clearInterval(progressInterval);
 
       } catch (err: any) {
         alert(err.message);
       } finally {
+        clearInterval(progressInterval);
         setIsLoading(false);
-        // Limpiar el input para permitir subir el mismo archivo si es necesario
+        setProgressMsg('');
         e.target.value = '';
       }
     };
@@ -646,6 +506,7 @@ const EditorPage = ({ user }: { user: User }) => {
   };
 
   const getCurrentQuestion = (): Question => {
+    // Para modo editor, si estamos en el final, es nueva
     if (currentQIndex === questions.length) {
       return {
         id: generateId(),
@@ -684,8 +545,10 @@ const EditorPage = ({ user }: { user: User }) => {
     if (direction === 'prev') {
       if (currentQIndex > 0) setCurrentQIndex(prev => prev - 1);
     } else {
+      // Permitir ir al índice questions.length (nueva pregunta)
       if (currentQIndex < questions.length) setCurrentQIndex(prev => prev + 1);
       else {
+        // Estamos en la nueva, si tiene texto, creamos otra nueva (movemos índice)
         const current = getCurrentQuestion();
         if(current.text.trim()) setCurrentQIndex(prev => prev + 1);
       }
@@ -710,21 +573,30 @@ const EditorPage = ({ user }: { user: User }) => {
 
   const handleSave = async () => {
     if (!title.trim()) return alert("Escribe un título para la lista.");
+    
+    // Filtrar preguntas vacías
     const validQuestions = questions.filter(q => q.text.trim() !== '');
     if (validQuestions.length === 0) return alert("Añade al menos una pregunta.");
     
-    // VALIDACIÓN: Respuesta vacía
-    const hasEmptyOptions = validQuestions.some(q => q.options.some(o => !o.text.trim()));
-    if (hasEmptyOptions) return alert("No puede haber respuestas vacías. Revisa tus preguntas.");
+    // Validar respuestas vacías
+    const emptyOptionIndex = questions.findIndex(q => q.text.trim() !== '' && q.options.some(o => !o.text.trim()));
+    if (emptyOptionIndex !== -1) {
+        // IMPORTANTE: Cambiamos a modo editor y vamos a la pregunta
+        setViewMode('editor');
+        setCurrentQIndex(emptyOptionIndex);
+        return alert(`La pregunta ${emptyOptionIndex + 1} tiene respuestas vacías.`);
+    }
 
-    const missingAnswersIndex = validQuestions.findIndex(q => !q.correctOptionId);
-    if (missingAnswersIndex !== -1) {
-        // Navegar a la pregunta inválida
-        setCurrentQIndex(missingAnswersIndex);
-        return alert(`La pregunta ${missingAnswersIndex + 1} no tiene marcada la respuesta correcta.`);
+    // Validar respuesta correcta marcada
+    const missingAnswerIndex = questions.findIndex(q => q.text.trim() !== '' && !q.correctOptionId);
+    if (missingAnswerIndex !== -1) {
+        setViewMode('editor');
+        setCurrentQIndex(missingAnswerIndex);
+        return alert(`La pregunta ${missingAnswerIndex + 1} no tiene marcada la respuesta correcta.`);
     }
 
     setIsLoading(true);
+    setProgressMsg("Guardando...");
     
     try {
       const test: Test = {
@@ -739,41 +611,63 @@ const EditorPage = ({ user }: { user: User }) => {
       navigate('/');
     } catch (error: any) {
        alert("Error al guardar: " + error.message);
+    } finally {
        setIsLoading(false);
+       setProgressMsg('');
     }
   };
 
-  // Cuando se selecciona una lista en el modal
   const onListSelectFinal = (id: string | null, newTitle?: string) => {
     if (id) {
-       // Navegar a modo edición de esa lista, manteniendo el modo
        navigate(`/editor/${id}?mode=${modeParam}`, { replace: true });
        setShowListSelector(false);
-       // Ya NO intentamos abrir la cámara automáticamente aquí, es poco fiable en móvil.
     } else if (newTitle) {
-      // Nuevo test
       setTitle(newTitle);
       setQuestions([]);
-      setCurrentQIndex(0);
+      // Si es cámara, vamos directo a scanner mode
+      if (modeParam === 'camera') setViewMode('scanner');
+      else {
+        setViewMode('editor');
+        setCurrentQIndex(0);
+      }
       setShowListSelector(false);
     }
   };
 
+  // Botón para editar pregunta específica desde el modo escáner
+  const editQuestionFromList = (index: number) => {
+    setViewMode('editor');
+    setCurrentQIndex(index);
+  }
+
+  // Añadir pregunta manual nueva
+  const addNewQuestionManual = () => {
+     setViewMode('editor');
+     setCurrentQIndex(questions.length); // Ir al final (nueva)
+  }
+
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center h-screen bg-slate-50 dark:bg-slate-900">
+      <div className="flex flex-col items-center justify-center h-screen bg-slate-50 dark:bg-slate-900 z-50 fixed inset-0">
         <Loader2 className="animate-spin text-brand-600 mb-4" size={48} />
-        <p className="text-slate-500 dark:text-slate-400">Procesando...</p>
+        <p className="text-slate-600 dark:text-slate-300 font-bold text-lg mb-2">{progressMsg || "Procesando..."}</p>
+        <div className="w-64 h-2 bg-slate-200 rounded-full overflow-hidden">
+           <div className="h-full bg-brand-500 animate-pulse w-full origin-left"></div>
+        </div>
       </div>
     );
   }
 
   const activeQ = getCurrentQuestion();
-  const isCameraMode = modeParam === 'camera';
+  
+  // Total pages display logic:
+  // Si estamos editando una existente: index + 1 / total
+  // Si estamos en la "fantasma" (nueva): total + 1 / total + 1
+  const displayTotal = currentQIndex === questions.length ? questions.length + 1 : questions.length;
+  const displayIndex = currentQIndex + 1;
 
   return (
     <div className="pb-24 max-w-4xl mx-auto">
-      {/* Modal de Selección */}
       {showListSelector && (
         <ListSelectionModal 
           user={user} 
@@ -782,12 +676,12 @@ const EditorPage = ({ user }: { user: User }) => {
         />
       )}
 
-      {/* Input oculto para cámara. Restringimos accept para evitar Video en la medida de lo posible */}
       <input 
         id="file-upload-trigger" 
         type="file" 
         className="hidden" 
-        accept="image/png,image/jpeg,image/webp,application/pdf" 
+        // Solo archivos e imágenes en PC (navegador gestiona cámara si es móvil)
+        accept="image/*,application/pdf" 
         onChange={handleFileUpload} 
       />
 
@@ -795,22 +689,23 @@ const EditorPage = ({ user }: { user: User }) => {
         <div className="flex items-center gap-2">
            <button onClick={() => navigate('/')} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-slate-600 dark:text-slate-300"><ArrowLeft /></button>
            <div className="flex flex-col">
-             <span className="text-xs text-slate-400 dark:text-slate-500 font-bold uppercase">Editando Lista</span>
+             <span className="text-xs text-slate-400 dark:text-slate-500 font-bold uppercase">
+               {viewMode === 'scanner' ? 'Modo Escáner' : 'Editor Manual'}
+             </span>
              <input 
                 value={title}
                 onChange={e => setTitle(e.target.value)}
                 placeholder="Título de la lista..."
-                className="font-bold text-slate-800 dark:text-white bg-transparent focus:outline-none focus:border-b-2 border-brand-500 w-48 sm:w-auto placeholder:text-slate-300"
+                className="font-bold text-slate-800 dark:text-white bg-transparent focus:outline-none focus:border-b-2 border-brand-500 w-32 sm:w-auto placeholder:text-slate-300"
              />
            </div>
         </div>
         <div className="flex gap-2">
-             <div className="flex flex-col items-center">
-                <span className="text-[10px] font-bold text-brand-600 dark:text-brand-400 uppercase tracking-wider mb-1">Escanear</span>
-                <Button variant="secondary" onClick={() => document.getElementById('file-upload-trigger')?.click()} className="w-12 h-12 rounded-full p-0 flex items-center justify-center border-slate-200 dark:border-slate-700 dark:bg-slate-800 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700">
-                   <Camera size={20} className="text-slate-600 dark:text-slate-300"/>
-                </Button>
-            </div>
+             {viewMode === 'editor' && (
+               <Button variant="secondary" onClick={() => setViewMode('scanner')} className="p-2 rounded-full border-slate-200 dark:border-slate-700 dark:bg-slate-800" title="Volver a Escáner">
+                  <Camera size={20} className="text-slate-600 dark:text-slate-300"/>
+               </Button>
+             )}
             
             <div className="flex flex-col items-center">
                 <span className="text-[10px] font-bold text-brand-600 dark:text-brand-400 uppercase tracking-wider mb-1">Guardar</span>
@@ -821,121 +716,153 @@ const EditorPage = ({ user }: { user: User }) => {
         </div>
       </header>
 
-      {/* Mensaje de ayuda para modo escáner en móvil si la lista está vacía o se acaba de cargar */}
-      {isCameraMode && questions.length === 0 && !isLoading && (
-         <div className="mb-6 bg-brand-50 dark:bg-slate-800 border border-brand-200 dark:border-slate-700 rounded-xl p-6 text-center">
-            <div className="bg-white dark:bg-slate-700 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm">
-                <Camera className="text-brand-500" size={32} />
-            </div>
-            <h3 className="font-bold text-lg text-slate-800 dark:text-white mb-2">Modo Escáner Activo</h3>
-            <p className="text-slate-600 dark:text-slate-300 mb-4 text-sm">Añade preguntas haciendo fotos o subiendo un PDF.</p>
-            <Button onClick={() => document.getElementById('file-upload-trigger')?.click()} className="w-full py-3 flex items-center justify-center gap-2">
-               <Upload size={18} /> Abrir Cámara / Archivo
-            </Button>
-         </div>
+      {/* --- VISTA ESCÁNER --- */}
+      {viewMode === 'scanner' && (
+        <div className="space-y-6">
+           <div className="bg-brand-50 dark:bg-slate-800 border border-brand-200 dark:border-slate-700 rounded-2xl p-8 text-center shadow-sm">
+              <div className="bg-white dark:bg-slate-700 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm">
+                  <Camera className="text-brand-500" size={36} />
+              </div>
+              <h3 className="font-bold text-xl text-slate-800 dark:text-white mb-2">Modo Escáner Activo</h3>
+              <p className="text-slate-600 dark:text-slate-300 mb-6 max-w-xs mx-auto">
+                 Haz fotos a tu libro o sube un PDF. La IA extraerá las preguntas automáticamente.
+              </p>
+              <Button onClick={() => document.getElementById('file-upload-trigger')?.click()} className="w-full sm:w-auto px-8 py-3 text-lg flex items-center justify-center gap-2 shadow-lg shadow-brand-500/20">
+                 <Upload size={20} /> Abrir Cámara / Archivo
+              </Button>
+              <div className="mt-4">
+                <button onClick={addNewQuestionManual} className="text-sm text-brand-600 dark:text-brand-400 font-medium hover:underline">
+                  O añadir pregunta manual
+                </button>
+              </div>
+           </div>
+
+           {questions.length > 0 && (
+             <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+                <div className="p-4 bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 font-bold text-slate-500 dark:text-slate-400 text-sm uppercase">
+                  Preguntas extraídas ({questions.length})
+                </div>
+                <div className="divide-y divide-slate-100 dark:divide-slate-700 max-h-[500px] overflow-y-auto">
+                  {questions.map((q, idx) => (
+                    <div key={q.id} onClick={() => editQuestionFromList(idx)} className="p-4 hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer flex gap-3 group transition-colors">
+                       <span className="font-bold text-slate-300 dark:text-slate-600 group-hover:text-brand-500">{idx + 1}.</span>
+                       <div className="flex-1">
+                          <p className="text-sm font-medium text-slate-800 dark:text-slate-200 line-clamp-2">{q.text}</p>
+                          <span className="text-xs text-slate-400">{q.options.length} opciones {q.correctOptionId ? '• Respuesta marcada' : '• Sin respuesta'}</span>
+                       </div>
+                       <ChevronRight size={16} className="text-slate-300 self-center"/>
+                    </div>
+                  ))}
+                </div>
+             </div>
+           )}
+        </div>
       )}
 
-      <div className="space-y-6">
-        
-        {/* Navegación de Preguntas Mejorada */}
-        <div className="flex justify-between items-center bg-white dark:bg-slate-800 p-2 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 mb-4">
-           <div className="flex gap-1">
-               <Button variant="ghost" onClick={goToFirst} disabled={currentQIndex === 0} className="px-2 dark:text-slate-400 dark:hover:bg-slate-700" title="Ir al principio">
-                 <ChevronsLeft size={20} />
-               </Button>
-               <Button variant="ghost" onClick={() => navigateQuestion('prev')} disabled={currentQIndex === 0} className="px-2 dark:text-slate-300 dark:hover:bg-slate-700">
-                 <ChevronLeft size={20} />
-               </Button>
-           </div>
-           
-           <button onClick={goToPagePrompt} className="font-mono font-bold text-slate-500 dark:text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 px-2 py-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
-             {currentQIndex + 1} <span className="text-slate-300 dark:text-slate-600">/</span> {questions.length + (activeQ.text ? 1 : 0)}
-           </button>
-
-           <div className="flex gap-1">
-               <Button variant="ghost" onClick={() => navigateQuestion('next')} className="px-2 text-brand-600 dark:text-brand-400 dark:hover:bg-slate-700">
-                 <ChevronRight size={20} />
-               </Button>
-               <Button variant="ghost" onClick={goToLast} className="px-2 text-brand-600 dark:text-brand-400 dark:hover:bg-slate-700" title="Ir al final">
-                 <ChevronsRight size={20} />
-               </Button>
-           </div>
-        </div>
-
-        {/* Tarjeta de Edición */}
-        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-md border border-slate-200 dark:border-slate-700 p-6 relative min-h-[400px]">
-            <div className="mb-6">
-              <label className="block text-xs uppercase text-slate-400 dark:text-slate-500 font-bold mb-2">Pregunta</label>
-              <TextArea 
-                value={activeQ.text} 
-                onChange={e => updateCurrentQuestion('text', e.target.value)} 
-                placeholder="Escribe la pregunta aquí..."
-                className="text-lg bg-slate-50 dark:bg-slate-900 dark:text-white dark:border-slate-700 border-slate-200 min-h-[100px] focus:bg-white dark:focus:bg-slate-800 transition-colors"
-              />
-            </div>
-
-            <div className="space-y-3">
-              <label className="block text-xs uppercase text-slate-400 dark:text-slate-500 font-bold mb-2">Respuestas (Marca la correcta)</label>
-              {activeQ.options.map((opt, oIndex) => (
-                <div key={opt.id} className="flex items-center gap-3 group">
-                  <button 
-                    onClick={() => setCorrectOption(opt.id)}
-                    className={`flex-shrink-0 w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all ${activeQ.correctOptionId === opt.id ? 'border-green-500 bg-green-500 text-white shadow-md shadow-green-200 dark:shadow-none' : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-transparent hover:border-slate-400'}`}
-                  >
-                    <CheckCircle size={18} fill="currentColor" className={activeQ.correctOptionId === opt.id ? 'text-white' : ''} />
-                  </button>
-                  <div className="flex-1 relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-xs font-bold">
-                       {String.fromCharCode(65 + oIndex)}
-                    </span>
-                    <Input 
-                      value={opt.text} 
-                      onChange={e => updateOption(oIndex, e.target.value)} 
-                      placeholder={`Opción ${oIndex + 1}`}
-                      className="pl-8 py-3 bg-slate-50 dark:bg-slate-900 dark:text-white dark:border-slate-700 border-slate-200 focus:bg-white dark:focus:bg-slate-800 transition-colors shadow-sm"
-                    />
+      {/* --- VISTA EDITOR MANUAL --- */}
+      {viewMode === 'editor' && (
+        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
+          
+          <div className="flex justify-between items-center bg-white dark:bg-slate-800 p-2 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 mb-4">
+             <div className="flex gap-1">
+                 <Button variant="ghost" onClick={goToFirst} disabled={currentQIndex === 0} className="px-2 dark:text-slate-400 dark:hover:bg-slate-700" title="Ir al principio">
+                   <ChevronsLeft size={20} />
+                 </Button>
+                 <Button variant="ghost" onClick={() => navigateQuestion('prev')} disabled={currentQIndex === 0} className="px-2 dark:text-slate-300 dark:hover:bg-slate-700">
+                   <ChevronLeft size={20} />
+                 </Button>
+             </div>
+             
+             <button onClick={goToPagePrompt} className="font-mono font-bold text-slate-500 dark:text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 px-2 py-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+               {displayIndex} <span className="text-slate-300 dark:text-slate-600">/</span> {displayTotal}
+             </button>
+  
+             <div className="flex gap-1">
+                 <Button variant="ghost" onClick={() => navigateQuestion('next')} disabled={currentQIndex === questions.length} className="px-2 text-brand-600 dark:text-brand-400 dark:hover:bg-slate-700">
+                   <ChevronRight size={20} />
+                 </Button>
+                 {/* Nuevo Botón + a la derecha */}
+                 <Button variant="secondary" onClick={addNewQuestionManual} className="px-2 ml-1 border-l border-slate-200 dark:border-slate-600 rounded-none rounded-r-lg" title="Nueva Pregunta">
+                    <Plus size={20} className="text-brand-600 dark:text-brand-400"/>
+                 </Button>
+             </div>
+          </div>
+  
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-md border border-slate-200 dark:border-slate-700 p-6 relative min-h-[400px]">
+              <div className="mb-6">
+                <label className="block text-xs uppercase text-slate-400 dark:text-slate-500 font-bold mb-2">Pregunta</label>
+                <TextArea 
+                  value={activeQ.text} 
+                  onChange={e => updateCurrentQuestion('text', e.target.value)} 
+                  placeholder="Escribe la pregunta aquí..."
+                  className="text-lg bg-slate-50 dark:bg-slate-900 dark:text-white dark:border-slate-700 border-slate-200 min-h-[100px] focus:bg-white dark:focus:bg-slate-800 transition-colors"
+                />
+              </div>
+  
+              <div className="space-y-3">
+                <label className="block text-xs uppercase text-slate-400 dark:text-slate-500 font-bold mb-2">Respuestas (Marca la correcta)</label>
+                {activeQ.options.map((opt, oIndex) => (
+                  <div key={opt.id} className="flex items-center gap-3 group">
+                    <button 
+                      onClick={() => setCorrectOption(opt.id)}
+                      className={`flex-shrink-0 w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all ${activeQ.correctOptionId === opt.id ? 'border-green-500 bg-green-500 text-white shadow-md shadow-green-200 dark:shadow-none' : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-transparent hover:border-slate-400'}`}
+                    >
+                      <CheckCircle size={18} fill="currentColor" className={activeQ.correctOptionId === opt.id ? 'text-white' : ''} />
+                    </button>
+                    <div className="flex-1 relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-xs font-bold">
+                         {String.fromCharCode(65 + oIndex)}
+                      </span>
+                      <Input 
+                        value={opt.text} 
+                        onChange={e => updateOption(oIndex, e.target.value)} 
+                        placeholder={`Opción ${oIndex + 1}`}
+                        className="pl-8 py-3 bg-slate-50 dark:bg-slate-900 dark:text-white dark:border-slate-700 border-slate-200 focus:bg-white dark:focus:bg-slate-800 transition-colors shadow-sm"
+                      />
+                    </div>
+                    <button 
+                       onClick={() => {
+                          const newOptions = activeQ.options.filter((_, i) => i !== oIndex);
+                          updateCurrentQuestion('options', newOptions);
+                       }}
+                       className="text-slate-300 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <XCircle size={20} />
+                    </button>
                   </div>
-                  <button 
-                     onClick={() => {
-                        const newOptions = activeQ.options.filter((_, i) => i !== oIndex);
-                        updateCurrentQuestion('options', newOptions);
-                     }}
-                     className="text-slate-300 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    <XCircle size={20} />
-                  </button>
-                </div>
-              ))}
+                ))}
+                
+                <button 
+                  onClick={() => {
+                     const newOpt = { id: generateId(), text: '' };
+                     updateCurrentQuestion('options', [...activeQ.options, newOpt]);
+                  }}
+                  className="mt-2 text-sm font-medium text-brand-600 dark:text-brand-400 hover:text-brand-700 flex items-center gap-1 px-2 py-1 rounded hover:bg-brand-50 dark:hover:bg-slate-700 transition-colors w-fit"
+                >
+                  <Plus size={16}/> Añadir otra opción
+                </button>
+              </div>
               
-              <button 
-                onClick={() => {
-                   const newOpt = { id: generateId(), text: '' };
-                   updateCurrentQuestion('options', [...activeQ.options, newOpt]);
-                }}
-                className="mt-2 text-sm font-medium text-brand-600 dark:text-brand-400 hover:text-brand-700 flex items-center gap-1 px-2 py-1 rounded hover:bg-brand-50 dark:hover:bg-slate-700 transition-colors w-fit"
-              >
-                <Plus size={16}/> Añadir otra opción
-              </button>
-            </div>
-            
-            {activeQ.id && currentQIndex < questions.length && (
-               <div className="absolute top-4 right-4">
-                  <button 
-                    onClick={() => {
-                       if(confirm("¿Borrar esta pregunta?")) {
-                          const newQs = questions.filter((_, i) => i !== currentQIndex);
-                          setQuestions(newQs);
-                          if(currentQIndex > 0) setCurrentQIndex(prev => prev -1);
-                       }
-                    }}
-                    className="text-slate-300 hover:text-red-500 p-2 hover:bg-red-50 rounded-full"
-                  >
-                    <Trash2 size={20}/>
-                  </button>
-               </div>
-            )}
+              {activeQ.id && currentQIndex < questions.length && (
+                 <div className="absolute top-4 right-4">
+                    <button 
+                      onClick={() => {
+                         if(confirm("¿Borrar esta pregunta?")) {
+                            const newQs = questions.filter((_, i) => i !== currentQIndex);
+                            setQuestions(newQs);
+                            // Si borramos la última, vamos a la anterior
+                            if(currentQIndex >= newQs.length) setCurrentQIndex(Math.max(0, newQs.length - 1));
+                         }
+                      }}
+                      className="text-slate-300 hover:text-red-500 p-2 hover:bg-red-50 rounded-full"
+                    >
+                      <Trash2 size={20}/>
+                    </button>
+                 </div>
+              )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };
@@ -1085,6 +1012,166 @@ const QuizPage = ({ user }: { user: User }) => {
   );
 };
 
+const HistoryPage = ({ user }: { user: User }) => {
+  const [results, setResults] = useState<TestResult[]>([]);
+  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const load = async () => {
+      const data = await storageService.getResults(user.uid);
+      setResults(data);
+      setLoading(false);
+    };
+    load();
+  }, [user]);
+
+  const handleDelete = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    if (confirm("¿Borrar este resultado?")) {
+      await storageService.deleteResult(id);
+      setResults(prev => prev.filter(r => r.id !== id));
+    }
+  };
+
+  const handleClearHistory = async () => {
+    if (confirm("¿Borrar TODO el historial?")) {
+        await storageService.deleteAllResults(user.uid);
+        setResults([]);
+    }
+  };
+
+  if (loading) return <div className="flex justify-center pt-20"><Loader2 className="animate-spin text-brand-500"/></div>;
+
+  return (
+    <div className="pb-24 max-w-4xl mx-auto">
+      <header className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Historial</h1>
+        {results.length > 0 && (
+            <button onClick={handleClearHistory} className="text-red-400 hover:text-red-500 text-sm font-medium">
+                Borrar todo
+            </button>
+        )}
+      </header>
+
+      {results.length === 0 ? (
+        <div className="text-center py-20 bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700">
+           <div className="bg-slate-100 dark:bg-slate-700 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+              <HistoryIcon size={32} className="text-slate-400 dark:text-slate-500" />
+           </div>
+           <p className="text-slate-500 dark:text-slate-400">Aún no has completado ningún test.</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {results.map(r => (
+            <div key={r.id} onClick={() => navigate(`/history/${r.id}`)} className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-100 dark:border-slate-700 shadow-sm hover:shadow-md transition-all cursor-pointer flex justify-between items-center group">
+               <div>
+                  <h3 className="font-bold text-slate-800 dark:text-white">{r.testTitle}</h3>
+                  <div className="text-xs text-slate-500 dark:text-slate-400 flex gap-2 mt-1">
+                     <span>{new Date(r.date).toLocaleDateString()}</span>
+                     <span>•</span>
+                     <span className={r.score === r.totalQuestions ? "text-green-500 font-bold" : "text-slate-500"}>
+                        {r.score}/{r.totalQuestions} aciertos
+                     </span>
+                  </div>
+               </div>
+               <div className="flex items-center gap-3">
+                  <div className={`text-lg font-bold ${r.score === r.totalQuestions ? 'text-green-500' : 'text-brand-600 dark:text-brand-400'}`}>
+                    {Math.round((r.score / r.totalQuestions) * 100)}%
+                  </div>
+                  <button onClick={(e) => handleDelete(e, r.id)} className="p-2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Trash2 size={18} />
+                  </button>
+                  <ChevronRight size={18} className="text-slate-300"/>
+               </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const ResultViewPage = ({ user }: { user: User }) => {
+    const { id } = useParams();
+    const navigate = useNavigate();
+    const [result, setResult] = useState<TestResult | undefined>(undefined);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const load = async () => {
+            if(!id) return;
+            const r = await storageService.getResultById(id);
+            setResult(r);
+            setLoading(false);
+        }
+        load();
+    }, [id]);
+
+    if(loading) return <div className="flex justify-center pt-20"><Loader2 className="animate-spin text-brand-500"/></div>;
+    if(!result) return <div className="text-center pt-20">Resultado no encontrado.</div>;
+
+    const percentage = Math.round((result.score / result.totalQuestions) * 100);
+
+    return (
+        <div className="pb-24 max-w-3xl mx-auto">
+            <header className="flex items-center gap-2 mb-6">
+                <button onClick={() => navigate('/history')} className="p-2 hover:bg-white dark:hover:bg-slate-800 rounded-full text-slate-500 dark:text-slate-400"><ArrowLeft /></button>
+                <h1 className="font-bold text-xl text-slate-800 dark:text-white">Resultados: {result.testTitle}</h1>
+            </header>
+
+            <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 mb-8 text-center">
+                <div className="text-sm text-slate-500 dark:text-slate-400 uppercase font-bold tracking-wider mb-2">Puntuación Final</div>
+                <div className="text-5xl font-black text-brand-600 dark:text-brand-400 mb-2">{percentage}%</div>
+                <div className="text-slate-600 dark:text-slate-300">
+                    Has acertado <strong>{result.score}</strong> de <strong>{result.totalQuestions}</strong> preguntas.
+                </div>
+            </div>
+
+            <div className="space-y-6">
+                {result.details.map((detail, idx) => (
+                    <div key={idx} className={`bg-white dark:bg-slate-800 rounded-xl border-l-4 p-4 shadow-sm ${detail.isCorrect ? 'border-l-green-500' : 'border-l-red-500'}`}>
+                        <div className="flex gap-3 mb-3">
+                           <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${detail.isCorrect ? 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400'}`}>
+                             {detail.isCorrect ? <CheckCircle size={14}/> : <XCircle size={14}/>}
+                           </div>
+                           <h3 className="font-bold text-slate-800 dark:text-slate-200">{detail.questionText}</h3>
+                        </div>
+
+                        <div className="space-y-2 pl-9">
+                            {detail.options.map(opt => {
+                                let style = "border-slate-200 dark:border-slate-700 opacity-60";
+                                let icon = null;
+
+                                if (opt.id === detail.selectedOptionId) {
+                                    if (detail.isCorrect) {
+                                        style = "border-green-500 bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-200 opacity-100";
+                                    } else {
+                                        style = "border-red-500 bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200 opacity-100";
+                                    }
+                                } else if (opt.id === detail.correctOptionId) {
+                                     // Mostrar la correcta si falló
+                                     if (!detail.isCorrect) {
+                                         style = "border-green-500 bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-200 opacity-100";
+                                     }
+                                }
+
+                                return (
+                                    <div key={opt.id} className={`p-3 rounded-lg border text-sm flex justify-between ${style}`}>
+                                        <span>{opt.text}</span>
+                                        {opt.id === detail.selectedOptionId && (detail.isCorrect ? <CheckCircle size={16}/> : <XCircle size={16}/>)}
+                                        {opt.id === detail.correctOptionId && !detail.isCorrect && <CheckCircle size={16}/>}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
 // --- Layout & Router ---
 
 const FabMenu = ({ onAction }: { onAction: (action: 'manual' | 'camera') => void }) => {
@@ -1196,6 +1283,7 @@ const App = () => {
           <Route path="/history" element={<HistoryPage user={user} />} />
           <Route path="/history/:id" element={<ResultViewPage user={user} />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/share/:id" element={<SharePage user={user} />} />
         </Routes>
       </Layout>
     </HashRouter>

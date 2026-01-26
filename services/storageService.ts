@@ -46,7 +46,7 @@ export const storageService = {
     }
   },
 
-  // Obtener un test por ID
+  // Obtener un test por ID (Público para compartir, si las reglas de Firebase lo permiten)
   getTestById: async (id: string): Promise<Test | undefined> => {
     try {
       const docRef = doc(db, "tests", id);
@@ -60,6 +60,24 @@ export const storageService = {
       console.error("Error obteniendo test: ", e);
       return undefined;
     }
+  },
+
+  // Copiar un test de otro usuario al usuario actual
+  copyTest: async (originalTestId: string, newUserId: string): Promise<string> => {
+      const original = await storageService.getTestById(originalTestId);
+      if (!original) throw new Error("Test original no encontrado");
+
+      const newId = Math.random().toString(36).substring(2, 9);
+      const newTest: Test = {
+          ...original,
+          id: newId,
+          userId: newUserId,
+          title: `${original.title} (Copia)`,
+          createdAt: Date.now()
+      };
+      
+      await setDoc(doc(db, "tests", newId), newTest);
+      return newId;
   },
 
   // Borrar un test

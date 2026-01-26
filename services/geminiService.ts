@@ -3,30 +3,35 @@ import { Question } from "../types";
 
 const generateId = () => Math.random().toString(36).substring(2, 9);
 
-export const parseFileToQuiz = async (base64Data: string, mimeType: string): Promise<Question[]> => {
-  // CORRECCIÓN CRÍTICA: Acceso directo a process.env.API_KEY
+export const parseFileToQuiz = async (base64Data: string, mimeType: string, onProgress?: (msg: string) => void): Promise<Question[]> => {
   const apiKey = process.env.API_KEY;
 
   if (!apiKey) {
-    throw new Error("Falta la API Key. En Netlify, ve a 'Site Settings > Environment Variables' y añade una variable llamada API_KEY con tu clave de Google.");
+    throw new Error("Falta la API Key.");
   }
 
   const ai = new GoogleGenAI({ apiKey: apiKey });
 
-  const prompt = `
-    Analyze the provided document (image or PDF). It contains multiple choice test questions.
-    Extract all questions, their options, and identify the correct answer if it is marked (circled, bolded, ticked, etc.).
-    
-    If the correct answer is NOT marked, set "correctOptionIndex" to -1.
-    If the correct answer IS marked, set "correctOptionIndex" to the 0-based index of the correct option in the list.
+  if (onProgress) onProgress("Analizando documento con IA...");
 
-    Return the data in a strict JSON array format.
+  // PROMPT OPTIMIZADO:
+  // 1. Pide explícitamente ignorar saltos de sección.
+  // 2. Pide NO incluir la numeración original (1., 2., etc).
+  // 3. Usa claves cortas en el JSON (q, o, c) para ahorrar Output Tokens y permitir más preguntas por respuesta.
+  const prompt = `
+    Analyze the provided document. It is a multiple choice test.
+    Extract ALL questions found in the document, regardless of section headers, page breaks, or topic changes. Do not stop until the end of the document.
+
+    Rules:
+    1. REMOVE any numbering from the question text (e.g., change "1. What is..." to "What is...").
+    2. Identify the correct answer if marked. Set "c" to the 0-based index. If not marked, set "c" to -1.
+    3. Return a JSON array using these short keys to save space:
+       "q": Question text.
+       "o": Array of options text.
+       "c": Correct option index.
   `;
 
   try {
-    // CAMBIO IMPORTANTE: Usamos 'gemini-3-flash-preview' en lugar de 'pro'.
-    // El modelo Flash es mucho más rápido y tiene límites de cuota gratuitos mucho más altos,
-    // evitando el error 429 que estabas recibiendo.
     const response: GenerateContentResponse = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: {
@@ -42,93 +47,70 @@ export const parseFileToQuiz = async (base64Data: string, mimeType: string): Pro
       },
       config: {
         responseMimeType: "application/json",
+        // Max output tokens increased slightly if possible by model defaults, 
+        // but schema minimization is the best strategy here.
         responseSchema: {
           type: Type.ARRAY,
           items: {
             type: Type.OBJECT,
             properties: {
-              questionText: { type: Type.STRING },
-              options: { 
-                type: Type.ARRAY, 
-                items: { type: Type.STRING } 
-              },
-              correctOptionIndex: { type: Type.INTEGER, description: "-1 if unknown, 0-N if known" }
+              q: { type: Type.STRING },
+              o: { type: Type.ARRAY, items: { type: Type.STRING } },
+              c: { type: Type.INTEGER }
             },
-            required: ["questionText", "options", "correctOptionIndex"],
-            propertyOrdering: ["questionText", "options", "correctOptionIndex"]
+            required: ["q", "o", "c"]
           }
         }
       }
     });
 
+    if (onProgress) onProgress("Procesando respuestas...");
+
     const responseText = response.text;
-    if (!responseText) {
-      throw new Error("La IA no devolvió ningún resultado. La imagen podría estar borrosa o vacía.");
-    }
+    if (!responseText) throw new Error("La IA no devolvió datos.");
 
     let jsonString = responseText.trim();
-    if (jsonString.startsWith('```json')) {
-      jsonString = jsonString.replace(/^```json/, '').replace(/```$/, '').trim();
-    } else if (jsonString.startsWith('```')) {
-       jsonString = jsonString.replace(/^```/, '').replace(/```$/, '').trim();
-    }
+    // Limpieza básica de markdown json si existiera
+    if (jsonString.startsWith('```json')) jsonString = jsonString.replace(/^```json/, '').replace(/```$/, '').trim();
+    else if (jsonString.startsWith('```')) jsonString = jsonString.replace(/^```/, '').replace(/```$/, '').trim();
 
     let rawData;
     try {
       rawData = JSON.parse(jsonString);
-    } catch (parseError) {
-      console.error("JSON Parse Error:", parseError, "Response Text:", responseText);
-      throw new Error("Error al leer la respuesta de la IA (formato inválido).");
+    } catch (e) {
+      throw new Error("Error de formato en la respuesta de la IA.");
     }
 
-    if (!Array.isArray(rawData)) {
-      throw new Error("La IA devolvió un formato incorrecto (se esperaba una lista).");
-    }
+    if (!Array.isArray(rawData)) throw new Error("Formato inválido.");
 
     return rawData.map((item: any) => {
-      const options = (item.options || []).map((optText: string) => ({
+      // Limpieza extra de numeración por si la IA falló en la instrucción
+      let cleanText = item.q || "Sin pregunta";
+      cleanText = cleanText.replace(/^\d+[\.\)\-]\s*/, ""); 
+
+      const options = (item.o || []).map((optText: string) => ({
         id: generateId(),
-        text: optText
+        text: optText.replace(/^[a-zA-Z][\.\)\-]\s*/, "") // Limpiar también "a) " de las opciones
       }));
 
       let correctOptionId = "";
-      if (typeof item.correctOptionIndex === 'number' && item.correctOptionIndex >= 0 && item.correctOptionIndex < options.length) {
-        correctOptionId = options[item.correctOptionIndex].id;
+      if (typeof item.c === 'number' && item.c >= 0 && item.c < options.length) {
+        correctOptionId = options[item.c].id;
       }
 
       return {
         id: generateId(),
-        text: item.questionText || "Sin pregunta",
+        text: cleanText,
         options: options,
         correctOptionId: correctOptionId
       };
     });
 
   } catch (error: any) {
-    console.error("Gemini Error Completo:", error);
-    
-    const errorStr = JSON.stringify(error, Object.getOwnPropertyNames(error)) + " " + String(error);
-
-    // 1. Error de Clave
-    if (errorStr.includes("API_KEY_INVALID") || errorStr.includes("API key not valid") || errorStr.includes("400")) {
-      throw new Error(
-        "❌ CLAVE API RECHAZADA\n\n" +
-        "Google ha rechazado tu clave. Revisa esto:\n" +
-        "1. ¿Has copiado bien la clave en Netlify? (Sin espacios extra)\n" +
-        "2. IMPORTANTE: Si pusiste restricciones HTTP en Google Cloud, debes añadir este dominio: " + window.location.hostname + "\n" +
-        "3. ¿Está habilitada la 'Generative Language API' en tu proyecto de Google?"
-      );
+    console.error("Gemini Error:", error);
+    if (error.message.includes("429")) {
+        throw new Error("⚠️ Límite de IA alcanzado. Espera un minuto.");
     }
-
-    // 2. Error de Cuota (429) - El que tenías
-    if (errorStr.includes("429") || errorStr.includes("quota") || errorStr.includes("exhausted")) {
-        throw new Error(
-            "⚠️ LÍMITE DE USO GRATUITO\n\n" +
-            "Has hecho demasiadas peticiones seguidas a Google en poco tiempo.\n" +
-            "Espera unos instantes y vuelve a intentarlo."
-        );
-    }
-    
-    throw new Error(error.message || "Ocurrió un error al procesar el archivo con la IA.");
+    throw new Error("Error al escanear: " + error.message);
   }
 };
