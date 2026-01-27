@@ -24,8 +24,6 @@ const extractTextFromPDF = async (base64Data: string, onProgress?: (msg: string,
       if (onProgress) onProgress(`Leyendo página PDF ${i}/${maxPages}...`, Math.round((i / maxPages) * 50));
       const page = await pdf.getPage(i);
       const textContent = await page.getTextContent();
-      // Unir ítems con salto de línea si están lejos verticalmente, o espacio si están cerca
-      // Simplificación: unimos con saltos de línea para facilitar el parseo posterior
       const pageText = textContent.items.map((item: any) => item.str).join('\n');
       fullText += `\n${pageText}\n`;
     }
@@ -37,60 +35,72 @@ const extractTextFromPDF = async (base64Data: string, onProgress?: (msg: string,
 };
 
 const extractTextFromImage = async (base64Data: string, onProgress?: (msg: string, percent: number) => void): Promise<string> => {
-    const worker = await createWorker('spa'); // Cargar idioma español
-    
     if (onProgress) onProgress("Iniciando motor OCR...", 10);
     
-    const ret = await worker.recognize(`data:image/png;base64,${base64Data}`, {}, {
-        logger: m => {
-            if (m.status === 'recognizing text') {
-                if (onProgress) onProgress("Escaneando texto...", 20 + Math.round(m.progress * 60));
+    try {
+        // CORRECCIÓN CRÍTICA: El logger debe pasarse en createWorker, no en recognize.
+        // Pasar funciones en recognize causa DataCloneError porque intenta enviarlas al worker.
+        const worker = await createWorker('spa', 1, {
+            logger: m => {
+                if (m.status === 'recognizing text') {
+                    // m.progress es un valor de 0 a 1
+                    const p = Math.round(m.progress * 100);
+                    // Mapeamos el progreso del OCR (0-100) al rango de la UI (20-90)
+                    if (onProgress) onProgress("Escaneando texto...", 20 + Math.round(p * 0.7));
+                }
             }
-        }
-    });
-    
-    await worker.terminate();
-    return ret.data.text;
+        });
+        
+        const ret = await worker.recognize(`data:image/png;base64,${base64Data}`);
+        await worker.terminate();
+        return ret.data.text;
+    } catch (e) {
+        console.error("Error OCR:", e);
+        throw new Error("Error al procesar la imagen. Intenta con una imagen más clara.");
+    }
 };
 
 // --- 2. LÓGICA DE PARSEO (EL CEREBRO SIN IA) ---
 
-/**
- * Convierte texto crudo en estructura de preguntas usando Expresiones Regulares.
- * Detecta patrones como:
- * "1. ¿Qué hora es?"
- * "a) Las cinco"
- * "b) Las seis"
- */
 const parseTextToQuestions = (text: string): Question[] => {
     const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
     const questions: Question[] = [];
     
     let currentQuestion: Question | null = null;
     
-    // Regex para detectar inicio de pregunta: "1.", "1-", "1)", "1 " al inicio de línea
+    // Regex mejoradas
+    // Detecta: "1.", "1-", "1)", "1 " al inicio, O líneas que empiezan con "¿" si no hay número
     const questionStartRegex = /^(\d+)[\.\)\-\s]+(.+)/;
+    const questionImplicitRegex = /^¿(.+)/; 
     
-    // Regex para detectar inicio de opción: "a.", "a)", "a-", "A.", "A)" al inicio de línea
+    // Detecta: "a.", "a)", "a-", "A.", "A)" al inicio de línea
     const optionStartRegex = /^([a-zA-Z])[\.\)\-\s]+(.+)/;
 
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         
-        // 1. ¿Es una nueva pregunta?
-        const questionMatch = line.match(questionStartRegex);
+        // 1. ¿Es una nueva pregunta explícita (con número)?
+        let questionMatch = line.match(questionStartRegex);
+        
+        // Si no tiene número, ¿parece una pregunta (empieza por ¿)?
+        if (!questionMatch && !currentQuestion) {
+             const implicit = line.match(questionImplicitRegex);
+             if (implicit) {
+                 // Simulamos match structure: [full, "0", text]
+                 questionMatch = [line, "0", line]; 
+             }
+        }
+
         if (questionMatch) {
-            // Guardar pregunta anterior si existe
+            // Guardar pregunta anterior
             if (currentQuestion) {
-                // Si no tiene opciones, intentamos buscarlas en líneas siguientes que no parezcan opciones explícitas
-                // pero por ahora cerramos la pregunta
                 questions.push(currentQuestion);
             }
             
             // Iniciar nueva pregunta
             currentQuestion = {
                 id: generateId(),
-                text: questionMatch[2].trim(), // El texto después del número
+                text: questionMatch[2].trim(), 
                 options: [],
                 correctOptionId: ""
             };
@@ -108,27 +118,22 @@ const parseTextToQuestions = (text: string): Question[] => {
             continue;
         }
 
-        // 3. Si no es ni inicio de pregunta ni inicio de opción:
-        //    Añadir al contexto actual (multilínea)
+        // 3. Texto continuado
         if (currentQuestion) {
-            // Si ya tenemos opciones, probablemente sea una continuación de la última opción
             if (currentQuestion.options.length > 0) {
                 const lastOption = currentQuestion.options[currentQuestion.options.length - 1];
                 lastOption.text += " " + line;
             } else {
-                // Si no hay opciones aún, es continuación del texto de la pregunta
                 currentQuestion.text += " " + line;
             }
         }
     }
 
-    // Empujar la última pregunta
     if (currentQuestion) {
         questions.push(currentQuestion);
     }
 
-    // FILTRADO FINAL Y LIMPIEZA
-    // Si una pregunta no tiene opciones detectadas, generamos 4 vacías para que el usuario las rellene
+    // Post-procesado: Si detectamos una pregunta sin opciones, creamos placeholders
     return questions.map(q => {
         if (q.options.length === 0) {
             return {
@@ -140,7 +145,6 @@ const parseTextToQuestions = (text: string): Question[] => {
     });
 };
 
-
 // --- FUNCIÓN PRINCIPAL EXPORTADA ---
 
 export const parseFileToQuiz = async (
@@ -151,7 +155,6 @@ export const parseFileToQuiz = async (
     
     let rawText = "";
 
-    // Paso 1: Obtener texto plano (OCR o PDF Parser)
     if (mimeType.includes('pdf')) {
         rawText = await extractTextFromPDF(base64Data, onProgress);
     } else {
@@ -160,23 +163,21 @@ export const parseFileToQuiz = async (
 
     if (onProgress) onProgress("Analizando estructura...", 90);
 
-    // Paso 2: Convertir texto plano a objetos Question
     const questions = parseTextToQuestions(rawText);
 
     if (onProgress) onProgress("Finalizado", 100);
 
-    // Si no se detectó nada, devolver al menos un bloque con el texto crudo para edición manual
+    // Fallback mejorado: Si no saca preguntas estructuradas, devuelve el texto en bruto
     if (questions.length === 0) {
          if (rawText.trim().length > 0) {
-             // Fallback: poner todo el texto en una pregunta para que el usuario lo edite
              return [{
                  id: generateId(),
-                 text: "No se detectó el formato automático. Texto extraído:\n\n" + rawText.substring(0, 500) + "...",
+                 text: "Texto extraído (Edita esto para crear tu pregunta):\n\n" + rawText.substring(0, 800) + (rawText.length > 800 ? "..." : ""),
                  options: Array(4).fill(null).map(() => ({ id: generateId(), text: '' })),
                  correctOptionId: ""
              }];
          }
-         throw new Error("No se pudo extraer texto legible de la imagen.");
+         throw new Error("No se pudo leer texto de la imagen.");
     }
 
     return questions;
