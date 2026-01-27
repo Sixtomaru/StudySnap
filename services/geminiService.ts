@@ -8,10 +8,10 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = `https://esm.sh/pdfjs-dist@4.0.379/buil
 
 const generateId = () => Math.random().toString(36).substring(2, 9);
 
-// CAMBIO: Usamos Gemini 2.0 Flash. 
-// El modelo 'preview' (gemini-3) tiene límite de 20/día.
-// Este modelo (gemini-2.0-flash) tiene límite de ~1500/día en el plan gratuito.
-const MODEL_NAME = "gemini-2.0-flash"; 
+// CAMBIO: Usamos el alias 'gemini-flash-latest'.
+// Esto apunta automáticamente a la versión Flash estable más reciente (actualmente 1.5 Flash).
+// Tiene un límite gratuito alto (1500 RPM) y es muy rápido.
+const MODEL_NAME = "gemini-flash-latest"; 
 
 // --- UTILIDADES ---
 
@@ -94,7 +94,7 @@ export const parseFileToQuiz = async (
   // CLAVE DIRECTA DEL ENTORNO
   const apiKey = process.env.API_KEY;
 
-  if (!apiKey || apiKey.includes("TU_CLAVE")) throw new Error("Falta la API Key en el servidor (.env).");
+  if (!apiKey || apiKey.includes("TU_CLAVE")) throw new Error("Falta la API Key en el archivo .env (o en la configuración de Netlify).");
 
   const ai = new GoogleGenAI({ apiKey: apiKey });
   let contentToSend: any = null;
@@ -180,14 +180,14 @@ export const parseFileToQuiz = async (
       if (onProgress) onProgress("Procesando...", 90);
 
       const responseText = response.text;
-      if (!responseText) throw new Error("Respuesta vacía");
+      if (!responseText) throw new Error("La IA devolvió una respuesta vacía.");
 
       let jsonString = responseText.trim();
       if (jsonString.startsWith('```json')) jsonString = jsonString.replace(/^```json/, '').replace(/```$/, '').trim();
       else if (jsonString.startsWith('```')) jsonString = jsonString.replace(/^```/, '').replace(/```$/, '').trim();
 
       const rawData = JSON.parse(jsonString);
-      if (!Array.isArray(rawData)) throw new Error("Formato inválido");
+      if (!Array.isArray(rawData)) throw new Error("La IA no devolvió un formato válido.");
 
       if (onProgress) onProgress("Listo!", 100);
 
@@ -219,7 +219,8 @@ export const parseFileToQuiz = async (
       console.warn(`Intento ${attempt} fallido:`, msg);
 
       if (msg.includes("404") || msg.includes("not found")) {
-         throw new Error("Modelo no disponible.");
+         // Si falla el modelo, probamos sin retry inmediato para cambiar estrategia si implementáramos fallback
+         throw new Error(`El modelo IA (${MODEL_NAME}) no está disponible o no existe.`);
       }
 
       if (msg.includes("429") || msg.includes("503") || msg.includes("quota") || msg.includes("exhausted")) {
@@ -230,15 +231,22 @@ export const parseFileToQuiz = async (
          if (onProgress) onProgress(`Servidor ocupado. Esperando...`, 65);
          await wait(delay);
          continue;
+      } else if (msg.includes("api key") || msg.includes("auth")) {
+          throw new Error("Tu API Key no es válida. Revisa el archivo .env");
       } else {
-        break; 
+        // Otros errores (parsing, network)
+        if (attempt === MAX_RETRIES) break;
       }
     }
   }
 
-  if (lastError?.message === "QUOTA_EXCEEDED" || lastError?.message?.includes("429")) {
-      throw new Error("⚠️ Servidor saturado (Límite diario alcanzado). Inténtalo mañana.");
+  // Error final más descriptivo
+  if (lastError) {
+      if (lastError.message === "QUOTA_EXCEEDED" || lastError.message?.includes("429")) {
+        throw new Error("⚠️ Servidor saturado (Límite diario alcanzado).");
+      }
+      throw new Error(`Error: ${lastError.message}`);
   }
   
-  throw new Error("No se pudo analizar. Inténtalo de nuevo.");
+  throw new Error("No se pudo analizar el documento. Intenta con una imagen más clara.");
 };
