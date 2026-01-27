@@ -38,7 +38,8 @@ import { signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/aut
 import { auth, googleProvider } from './services/firebaseConfig';
 import { Button, Card, Input, TextArea, Badge } from './components/UI';
 import { storageService } from './services/storageService';
-import { parseFileToQuiz } from './services/geminiService';
+// CAMBIO IMPORTANTE: Usamos el servicio OCR local en lugar de Gemini AI
+import { parseFileToQuiz } from './services/ocrService';
 import { Test, Question, Option, TestResult, AnswerDetail } from './types';
 
 // --- Utils ---
@@ -200,7 +201,7 @@ const SettingsPage = () => {
         </div>
       </div>
       
-      <p className="text-center text-slate-400 text-xs mt-8">StudySnap v1.0 • Hecho con IA</p>
+      <p className="text-center text-slate-400 text-xs mt-8">StudySnap v1.1 • Motor OCR Local</p>
     </div>
   );
 };
@@ -574,18 +575,14 @@ const EditorPage = ({ user }: { user: User }) => {
     const validQuestions = questions.filter(q => q.text.trim() !== '');
     if (validQuestions.length === 0) return alert("Añade al menos una pregunta.");
     
-    const emptyOptionIndex = questions.findIndex(q => q.text.trim() !== '' && q.options.some(o => !o.text.trim()));
-    if (emptyOptionIndex !== -1) {
-        setViewMode('editor');
-        setCurrentQIndex(emptyOptionIndex);
-        return alert(`La pregunta ${emptyOptionIndex + 1} tiene respuestas vacías.`);
-    }
-
+    // Permitimos guardar aunque no esté "perfecto", ya que ahora la edición manual es más importante
     const missingAnswerIndex = questions.findIndex(q => q.text.trim() !== '' && !q.correctOptionId);
     if (missingAnswerIndex !== -1) {
-        setViewMode('editor');
-        setCurrentQIndex(missingAnswerIndex);
-        return alert(`La pregunta ${missingAnswerIndex + 1} no tiene marcada la respuesta correcta.`);
+        if(!confirm(`La pregunta ${missingAnswerIndex + 1} no tiene respuesta marcada. ¿Guardar de todas formas?`)) {
+            setViewMode('editor');
+            setCurrentQIndex(missingAnswerIndex);
+            return;
+        }
     }
 
     setIsLoading(true);
@@ -698,7 +695,7 @@ const EditorPage = ({ user }: { user: User }) => {
               </div>
               <h3 className="font-bold text-xl text-slate-800 dark:text-white mb-2">Modo Escáner Activo</h3>
               <p className="text-slate-600 dark:text-slate-300 mb-6 max-w-xs mx-auto">
-                 Haz fotos a tu libro o sube un PDF. La IA extraerá las preguntas automáticamente.
+                 Haz fotos a tu libro o sube un PDF. El sistema extraerá las preguntas automáticamente sin usar Internet.
               </p>
               <Button onClick={() => document.getElementById('file-upload-trigger')?.click()} className="w-full sm:w-auto px-8 py-3 text-lg flex items-center justify-center gap-2 shadow-lg shadow-brand-500/20">
                  <Upload size={20} /> Abrir Cámara / Archivo
