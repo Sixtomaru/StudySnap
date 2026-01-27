@@ -185,7 +185,7 @@ const SettingsPage = () => {
       
       <div className="text-center p-4">
           <Button variant="danger" onClick={() => signOut(auth)} className="w-full md:w-auto">Cerrar Sesión</Button>
-          <p className="text-center text-slate-400 text-xs mt-8">StudySnap v1.7 • Gemini Powered</p>
+          <p className="text-center text-slate-400 text-xs mt-8">StudySnap v1.8 • Gemini Powered</p>
       </div>
     </div>
   );
@@ -194,6 +194,7 @@ const SettingsPage = () => {
 const HistoryPage = ({ user }: { user: User }) => {
     const [results, setResults] = useState<TestResult[]>([]);
     const [loading, setLoading] = useState(true);
+    const [selectedResult, setSelectedResult] = useState<TestResult | null>(null);
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -210,44 +211,100 @@ const HistoryPage = ({ user }: { user: User }) => {
         if(confirm("¿Borrar este resultado?")) {
             await storageService.deleteResult(id);
             setResults(prev => prev.filter(r => r.id !== id));
+            if(selectedResult?.id === id) setSelectedResult(null);
+        }
+    }
+
+    const handleDeleteAll = async () => {
+        if(confirm("¿ESTÁS SEGURO? Se borrará TODO tu historial de resultados.")) {
+            await storageService.deleteAllResults(user.uid);
+            setResults([]);
         }
     }
 
     if (loading) return <div className="flex justify-center pt-20"><Loader2 className="animate-spin text-brand-500" size={40}/></div>;
 
+    // --- Detail View Overlay ---
+    if (selectedResult) {
+        return (
+            <div className="fixed inset-0 bg-slate-50 dark:bg-slate-900 z-50 overflow-y-auto animate-in slide-in-from-bottom-5 duration-300 pb-20">
+                <header className="sticky top-0 bg-white dark:bg-slate-800 p-4 flex items-center gap-3 border-b border-slate-200 dark:border-slate-700 shadow-sm z-10">
+                    <button onClick={() => setSelectedResult(null)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full"><ArrowLeft /></button>
+                    <div>
+                        <h2 className="font-bold text-slate-800 dark:text-white truncate max-w-[200px]">{selectedResult.testTitle}</h2>
+                        <p className="text-xs text-slate-500">{new Date(selectedResult.date).toLocaleString()}</p>
+                    </div>
+                    <div className="ml-auto font-black text-xl text-brand-600 dark:text-brand-400">
+                        {selectedResult.score}/10
+                    </div>
+                </header>
+                <div className="p-4 max-w-2xl mx-auto space-y-4">
+                    {selectedResult.details.map((ans, idx) => (
+                        <div key={idx} className={`bg-white dark:bg-slate-800 p-4 rounded-xl border-l-4 ${ans.isCorrect ? 'border-green-500' : 'border-red-500'} shadow-sm`}>
+                            <p className="font-bold text-slate-800 dark:text-white mb-2">{idx + 1}. {ans.questionText}</p>
+                            {ans.options.map(opt => {
+                                const isSelected = opt.id === ans.selectedOptionId;
+                                const isCorrect = opt.id === ans.correctOptionId;
+                                let bg = "bg-slate-50 dark:bg-slate-900";
+                                if (isCorrect) bg = "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 ring-1 ring-green-500";
+                                else if (isSelected) bg = "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 ring-1 ring-red-500";
+                                
+                                return (
+                                    <div key={opt.id} className={`p-3 rounded-lg mb-2 text-sm font-medium ${bg} flex justify-between`}>
+                                        <span>{opt.text}</span>
+                                        {isCorrect && <CheckCircle size={16}/>}
+                                        {isSelected && !isCorrect && <XCircle size={16}/>}
+                                    </div>
+                                )
+                            })}
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="animate-in fade-in zoom-in-95 duration-300">
-             <header className="flex items-center gap-2 mb-6">
-                <button onClick={() => navigate('/')} className="md:hidden p-2 hover:bg-white/50 rounded-full text-slate-700 dark:text-slate-300"><ArrowLeft /></button>
-                <h1 className="font-bold text-3xl text-slate-800 dark:text-white">Mis Resultados</h1>
+             <header className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-2">
+                    <button onClick={() => navigate('/')} className="md:hidden p-2 hover:bg-white/50 rounded-full text-slate-700 dark:text-slate-300"><ArrowLeft /></button>
+                    <h1 className="font-bold text-3xl text-slate-800 dark:text-white">Historial</h1>
+                </div>
+                {results.length > 0 && (
+                    <Button variant="danger" size="sm" onClick={handleDeleteAll} className="flex items-center gap-1">
+                        <Trash2 size={16}/> Borrar todo
+                    </Button>
+                )}
              </header>
 
              {results.length === 0 ? (
                  <div className="text-center py-20 text-slate-400">
-                     <Trophy size={48} className="mx-auto mb-4 opacity-50"/>
+                     <HistoryIcon size={48} className="mx-auto mb-4 opacity-50"/>
                      <p>Aún no has completado ningún test.</p>
                  </div>
              ) : (
                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                      {results.map(res => (
-                         <div key={res.id} className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col gap-3">
+                         <div key={res.id} onClick={() => setSelectedResult(res)} className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col gap-3 cursor-pointer hover:border-brand-300 transition-colors group">
                              <div className="flex justify-between items-start">
-                                 <div>
-                                     <h3 className="font-bold text-slate-800 dark:text-white text-lg">{res.testTitle}</h3>
-                                     <p className="text-xs text-slate-500 flex items-center gap-1">
-                                         <Calendar size={12}/> {new Date(res.date).toLocaleDateString()} • {new Date(res.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                 <div className="flex-1 min-w-0 pr-2">
+                                     <h3 className="font-bold text-slate-800 dark:text-white text-lg truncate group-hover:text-brand-600 transition-colors">{res.testTitle}</h3>
+                                     <p className="text-xs text-slate-500 flex items-center gap-1 mt-1">
+                                         <Calendar size={12}/> {new Date(res.date).toLocaleDateString()}
                                      </p>
                                  </div>
-                                 <div className={`px-3 py-1 rounded-lg font-bold text-sm ${res.score >= 5 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
+                                 <div className={`px-3 py-1 rounded-lg font-bold text-sm flex-shrink-0 ${res.score >= 5 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
                                      {res.score}/10
                                  </div>
                              </div>
                              <div className="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-2 mt-2">
                                  <div className={`h-2 rounded-full ${res.score >= 5 ? 'bg-green-500' : 'bg-red-500'}`} style={{width: `${res.score * 10}%`}}></div>
                              </div>
-                             <div className="flex justify-end pt-2">
-                                 <button onClick={(e) => handleDelete(e, res.id)} className="text-slate-400 hover:text-red-500 text-sm flex items-center gap-1 transition-colors">
-                                     <Trash2 size={14}/> Borrar
+                             <div className="flex justify-between items-center pt-2 mt-auto">
+                                 <span className="text-xs text-brand-600 dark:text-brand-400 font-medium opacity-0 group-hover:opacity-100 transition-opacity">Ver detalles</span>
+                                 <button onClick={(e) => handleDelete(e, res.id)} className="text-slate-400 hover:text-red-500 text-sm flex items-center gap-1 transition-colors z-10 p-1 hover:bg-red-50 rounded">
+                                     <Trash2 size={16}/>
                                  </button>
                              </div>
                          </div>
@@ -430,7 +487,7 @@ const EditorPage = ({ user }: { user: User }) => {
       if(!testId && !t) return;
       const validQs = qs.filter(q => q.text.trim()); 
       
-      let pdfMeta: PDFProgress | null = null; // Important: null instead of undefined for Firestore
+      let pdfMeta: PDFProgress | null = null; 
       if (pdfState) {
           pdfMeta = { totalPages: pdfState.totalPages, lastProcessedPage: pdfState.lastProcessedPage };
       } else if (resumeMetadata) {
@@ -443,9 +500,9 @@ const EditorPage = ({ user }: { user: User }) => {
         title: t,
         createdAt: Date.now(),
         questions: validQs,
-        pdfMetadata: pdfMeta || undefined // Clean undefined if null is issue, but usually null works. Firestore needs null or omission. Undefined throws error.
+        pdfMetadata: pdfMeta || undefined 
       };
-      // Firestore strict check: undefined is not allowed. 
+      
       if(pdfMeta === null) delete test.pdfMetadata;
       else test.pdfMetadata = pdfMeta;
 
@@ -608,18 +665,18 @@ const EditorPage = ({ user }: { user: User }) => {
         
         <div className="flex items-center gap-3">
              {viewMode !== 'detail' && (
-                 <div className="flex flex-col items-center">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 hidden md:block">{isMobile ? 'Escanear' : 'Subir PDF'}</span>
-                    <Button onClick={() => document.getElementById('file-upload')?.click()} className="w-10 h-10 md:w-auto md:h-10 md:px-4 rounded-xl flex items-center justify-center bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:text-white shadow-sm p-0 md:py-2">
-                        {isMobile ? <Camera size={20}/> : <><Upload size={18} className="mr-2"/> Subir PDF</>}
+                 <div className="flex flex-col items-center cursor-pointer" onClick={() => document.getElementById('file-upload')?.click()}>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 block">Subir PDF</span>
+                    <Button className="w-10 h-10 md:w-auto md:h-10 md:px-4 rounded-xl flex items-center justify-center bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:text-white shadow-sm p-0 md:py-2">
+                         <Upload size={18}/>
                     </Button>
                  </div>
              )}
 
-             <div className="flex flex-col items-center">
+             <div className="flex flex-col items-center cursor-pointer" onClick={handleExitOrSave}>
                 <span className="text-[10px] font-bold text-brand-600 dark:text-brand-400 uppercase tracking-wider mb-1">Guardar</span>
-                <Button onClick={handleExitOrSave} className="w-10 h-10 rounded-xl flex items-center justify-center bg-brand-600 hover:bg-brand-700 text-white shadow-lg shadow-brand-500/30 p-0">
-                    <Save size={20} className="text-white"/>
+                <Button className="w-10 h-10 rounded-xl flex items-center justify-center bg-brand-600 hover:bg-brand-700 text-white shadow-lg shadow-brand-500/30 p-0">
+                    <Save size={20} className="text-white" strokeWidth={2.5}/>
                 </Button>
              </div>
         </div>
@@ -681,18 +738,17 @@ const EditorPage = ({ user }: { user: User }) => {
             <div className="animate-in fade-in slide-in-from-right-4 duration-300 h-full">
                 <div className="flex justify-between items-center mb-4 bg-white dark:bg-slate-800 p-2 rounded-xl border border-slate-100 dark:border-slate-700 shadow-sm">
                     <div className="flex gap-1">
-                        <Button variant="ghost" onClick={() => setCurrentQIndex(0)} disabled={currentQIndex === 0}><ChevronsLeft size={20}/></Button>
-                        <Button variant="ghost" onClick={() => setCurrentQIndex(prev => Math.max(0, prev - 1))} disabled={currentQIndex === 0}><ChevronLeft size={20}/></Button>
+                        <Button variant="ghost" onClick={() => setCurrentQIndex(prev => Math.max(0, prev - 1))} disabled={currentQIndex === 0} className="px-2"><ChevronLeft size={24}/></Button>
                     </div>
                     
-                    <button onClick={jumpToPage} className="font-mono font-bold text-brand-600 dark:text-brand-400 bg-brand-50 dark:bg-brand-900/30 px-3 py-1 rounded hover:bg-brand-100 transition-colors">
+                    <button onClick={jumpToPage} className="font-mono font-bold text-brand-600 dark:text-brand-400 bg-brand-50 dark:bg-brand-900/30 px-4 py-2 rounded-lg hover:bg-brand-100 transition-colors text-lg">
                         {currentQIndex + 1} / {questions.length > currentQIndex ? questions.length : currentQIndex + 1}
                     </button>
                     
                     <div className="flex gap-1">
-                        <Button variant="ghost" onClick={() => setCurrentQIndex(prev => prev + 1)} disabled={currentQIndex >= questions.length}><ChevronRight size={20}/></Button>
-                        <Button variant="ghost" onClick={goToLastEdited} title="Última editada"><ChevronsRight size={20}/></Button>
-                        <Button variant="secondary" onClick={addNewQuestionInDetail} title="Nueva pregunta" className="ml-1"><Plus size={18}/></Button>
+                        <Button variant="ghost" onClick={() => setCurrentQIndex(prev => prev + 1)} disabled={currentQIndex >= questions.length} className="px-2"><ChevronRight size={24}/></Button>
+                        {!isMobile && <Button variant="ghost" onClick={goToLastEdited} title="Última editada"><ChevronsRight size={20}/></Button>}
+                        <Button variant="secondary" onClick={addNewQuestionInDetail} title="Nueva pregunta" className="ml-1 w-10 h-10 p-0 flex items-center justify-center rounded-lg"><Plus size={20}/></Button>
                     </div>
                 </div>
 

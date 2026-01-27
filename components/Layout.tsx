@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   Home, 
-  Trophy, // Icono para Resultados/Historial
+  History, // Cambiado Trophy por History (Reloj con flecha)
   Settings, 
   Plus, 
   Camera, 
@@ -60,7 +60,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, onFabAction }) => {
 
         <nav className="space-y-2 flex-1">
           <NavItem path="/" icon={Home} label="Inicio" />
-          <NavItem path="/history" icon={Trophy} label="Resultados" />
+          <NavItem path="/history" icon={History} label="Historial" />
           <NavItem path="/settings" icon={Settings} label="Ajustes" />
         </nav>
 
@@ -82,24 +82,17 @@ export const Layout: React.FC<LayoutProps> = ({ children, onFabAction }) => {
       </main>
 
       {/* --- MOBILE BOTTOM BAR --- */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-slate-800/90 backdrop-blur-lg border-t border-slate-200 dark:border-slate-700 px-6 py-4 grid grid-cols-4 gap-2 items-center z-40 pb-safe">
-        {/* Usamos grid para distribuir 4 elementos: Home, Historial, FAB (centro-ish), Settings */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-slate-800/90 backdrop-blur-lg border-t border-slate-200 dark:border-slate-700 px-6 py-4 grid grid-cols-3 gap-2 items-center z-40 pb-safe">
         
+        {/* Izquierda: Home */}
         <button 
           onClick={() => navigate('/')}
           className={`flex flex-col items-center justify-center p-2 rounded-xl transition-colors ${isActive('/') ? 'text-brand-600' : 'text-slate-400'}`}
         >
-          <Home size={26} strokeWidth={isActive('/') ? 2.5 : 2}/>
+          <Home size={28} strokeWidth={isActive('/') ? 2.5 : 2}/>
         </button>
 
-        <button 
-          onClick={() => navigate('/history')}
-          className={`flex flex-col items-center justify-center p-2 rounded-xl transition-colors ${isActive('/history') ? 'text-brand-600' : 'text-slate-400'}`}
-        >
-          <Trophy size={26} strokeWidth={isActive('/history') ? 2.5 : 2}/>
-        </button>
-
-        {/* FAB Container (Absolute positioned relative to screen center or just in flow) */}
+        {/* Centro: FAB */}
         <div className="relative flex justify-center items-center -top-6">
            {showFabMenu && (
              <div className="absolute bottom-full mb-4 flex flex-col gap-3 w-max animate-in slide-in-from-bottom-5 fade-in duration-200">
@@ -125,11 +118,12 @@ export const Layout: React.FC<LayoutProps> = ({ children, onFabAction }) => {
            </button>
         </div>
 
+        {/* Derecha: Historial (ocupando el lugar de ajustes) */}
         <button 
-          onClick={() => navigate('/settings')}
-          className={`flex flex-col items-center justify-center p-2 rounded-xl transition-colors ${isActive('/settings') ? 'text-brand-600' : 'text-slate-400'}`}
+          onClick={() => navigate('/history')}
+          className={`flex flex-col items-center justify-center p-2 rounded-xl transition-colors ${isActive('/history') ? 'text-brand-600' : 'text-slate-400'}`}
         >
-          <Settings size={26} strokeWidth={isActive('/settings') ? 2.5 : 2}/>
+          <History size={28} strokeWidth={isActive('/history') ? 2.5 : 2}/>
         </button>
       </div>
 
