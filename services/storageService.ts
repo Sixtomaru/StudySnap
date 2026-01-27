@@ -12,33 +12,6 @@ import {
 } from 'firebase/firestore';
 
 export const storageService = {
-  // --- Global Settings (Nube) ---
-  
-  // Guardar clave global (Para que la usen todos los usuarios)
-  saveGlobalApiKey: async (apiKey: string): Promise<void> => {
-      try {
-          await setDoc(doc(db, "settings", "global_config"), { apiKey, updatedAt: Date.now() }, { merge: true });
-      } catch(e) {
-          console.error("Error guardando clave global:", e);
-          throw e;
-      }
-  },
-
-  // Verificar si existe una clave global configurada
-  checkGlobalConfig: async (): Promise<{ hasKey: boolean, updatedAt?: number }> => {
-      try {
-          const docRef = doc(db, "settings", "global_config");
-          const docSnap = await getDoc(docRef);
-          if (docSnap.exists() && docSnap.data().apiKey) {
-              return { hasKey: true, updatedAt: docSnap.data().updatedAt };
-          }
-          return { hasKey: false };
-      } catch (e) {
-          console.error("Error verificando config global:", e);
-          return { hasKey: false };
-      }
-  },
-
   // --- Tests ---
   
   // Guardar un test (Nuevo o Editar)

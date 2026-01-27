@@ -175,48 +175,6 @@ const ListSelectionModal = ({
 const SettingsPage = () => {
   const { isDark, toggle } = useDarkMode();
   const navigate = useNavigate();
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem('user_gemini_key') || '');
-  const [showSaveMsg, setShowSaveMsg] = useState(false);
-  const [isSavingCloud, setIsSavingCloud] = useState(false);
-  const [cloudStatus, setCloudStatus] = useState<{hasKey: boolean, updatedAt?: number} | null>(null);
-
-  useEffect(() => {
-      storageService.checkGlobalConfig().then(status => setCloudStatus(status));
-  }, []);
-
-  const handleSaveKey = () => {
-    localStorage.setItem('user_gemini_key', apiKey.trim());
-    setShowSaveMsg(true);
-    setTimeout(() => setShowSaveMsg(false), 2000);
-  };
-
-  const handleSaveToCloud = async () => {
-      if(!apiKey.trim()) return alert("Escribe una clave primero.");
-      
-      const confirmMsg = cloudStatus?.hasKey 
-        ? "⚠️ YA EXISTE UNA CLAVE GLOBAL.\n\nAl guardar, SOBRESCRIBIRÁS la clave actual y TODOS los usuarios empezarán a usar la nueva inmediatamente.\n\n¿Confirmar actualización?"
-        : "⚠️ ATENCIÓN: Esto guardará tu clave en la base de datos compartida.\n\nCualquier usuario que inicie sesión en esta app usará automáticamente esta clave.\n\n¿Estás seguro?";
-
-      if(!confirm(confirmMsg)) return;
-      
-      setIsSavingCloud(true);
-      try {
-          await storageService.saveGlobalApiKey(apiKey.trim());
-          alert("✅ Clave actualizada en la nube.");
-          setCloudStatus({ hasKey: true, updatedAt: Date.now() });
-      } catch(e) {
-          alert("Error al guardar en la nube.");
-      } finally {
-          setIsSavingCloud(false);
-      }
-  };
-
-  const createMagicLink = () => {
-      if(!apiKey.trim()) return alert("Escribe una clave primero.");
-      const url = `${window.location.origin}/?key=${apiKey.trim()}`;
-      navigator.clipboard.writeText(url);
-      alert("🔗 Enlace Mágico copiado!\n\nEnvía este enlace a tus amigos. Al abrirlo, la app se configurará sola.");
-  }
 
   return (
     <div className="pb-24 max-w-lg mx-auto p-4 animate-in fade-in zoom-in-95 duration-300">
@@ -249,76 +207,17 @@ const SettingsPage = () => {
             </button>
           </div>
         </div>
-
-        {/* API Key Personal */}
-        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
-          <div className="p-6">
-            <div className="flex items-center gap-4 mb-4">
-              <div className="bg-yellow-50 dark:bg-yellow-900/20 p-3 rounded-xl text-yellow-600 dark:text-yellow-400">
-                <Key size={24} />
-              </div>
-              <div>
-                <h3 className="font-bold text-lg text-slate-800 dark:text-white">API Key (Inteligencia Artificial)</h3>
-                <p className="text-sm text-slate-500 dark:text-slate-400">Clave de Google AI Studio para evitar límites.</p>
-              </div>
-            </div>
-
-            {/* Estado de la Nube */}
-            <div className="mb-4 p-3 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-700 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                    <Cloud size={16} className={cloudStatus?.hasKey ? "text-green-500" : "text-slate-400"}/>
-                    <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                        Estado Nube: {cloudStatus === null ? '...' : cloudStatus.hasKey ? '✅ Clave Activa' : '❌ Sin Clave Global'}
-                    </span>
-                </div>
-                {cloudStatus?.hasKey && (
-                    <span className="text-[10px] text-slate-400">
-                        {new Date(cloudStatus.updatedAt || 0).toLocaleDateString()}
-                    </span>
-                )}
-            </div>
-            
-            <div className="space-y-3">
-               <Input 
-                 type="password" 
-                 placeholder="Pegar API Key aquí..."
-                 value={apiKey}
-                 onChange={(e) => setApiKey(e.target.value)}
-                 className="dark:bg-slate-900 dark:border-slate-600 dark:text-white"
-               />
-               
-               <div className="flex justify-between items-center text-xs text-brand-600 dark:text-brand-400 mb-2">
-                  <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="hover:underline flex items-center gap-1">
-                    Obtener Clave Gratis <ExternalLink size={12}/>
-                  </a>
-                  {cloudStatus?.hasKey && (
-                      <span className="text-slate-400 italic">Si la actual falla, genera una nueva y actualízala aquí.</span>
-                  )}
-               </div>
-
-               <div className="flex flex-wrap gap-2">
-                 <Button onClick={handleSaveKey} disabled={showSaveMsg} className="flex-1 text-sm py-2">
-                    {showSaveMsg ? "Guardado!" : "Guardar en mi Móvil"}
-                 </Button>
-               </div>
-               
-               <hr className="border-slate-100 dark:border-slate-700 my-4"/>
-               
-               <p className="text-xs font-bold text-slate-400 uppercase">Administrador / Compartir</p>
-               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <Button onClick={createMagicLink} variant="secondary" className="text-xs flex items-center justify-center gap-2 dark:bg-slate-700 dark:text-white dark:border-slate-600">
-                        <LinkIcon size={14}/> Copiar Enlace Mágico
-                    </Button>
-                    <Button onClick={handleSaveToCloud} variant="secondary" className={`text-xs flex items-center justify-center gap-2 dark:bg-slate-700 dark:text-white dark:border-slate-600 ${cloudStatus?.hasKey ? 'border-yellow-200 bg-yellow-50 dark:bg-yellow-900/10 text-yellow-700 dark:text-yellow-400' : ''}`} disabled={isSavingCloud}>
-                        {isSavingCloud ? <Loader2 className="animate-spin" size={14}/> : cloudStatus?.hasKey ? <><RefreshCw size={14}/> Actualizar Global (Sobrescribir)</> : <><Cloud size={14}/> Guardar en Nube (Para Todos)</>}
-                    </Button>
-               </div>
-            </div>
-          </div>
+        
+        {/* Info */}
+        <div className="text-center p-4">
+            <p className="text-sm text-slate-400">
+              ¿Problemas con el servidor? Contacta con el administrador para revisar la cuota de la API.
+            </p>
         </div>
+
       </div>
       
-      <p className="text-center text-slate-400 text-xs mt-8">StudySnap v1.3 • Gemini Powered</p>
+      <p className="text-center text-slate-400 text-xs mt-8">StudySnap v1.4 • Gemini Powered</p>
     </div>
   );
 };

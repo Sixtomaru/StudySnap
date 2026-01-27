@@ -2,47 +2,20 @@ import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
 import { Question } from "../types";
 // @ts-ignore
 import * as pdfjsLib from 'pdfjs-dist';
-// Importamos la DB para leer la clave global
-import { db } from './firebaseConfig';
-import { doc, getDoc } from 'firebase/firestore';
 
 // Configurar el worker de PDF.js desde CDN
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://esm.sh/pdfjs-dist@4.0.379/build/pdf.worker.min.mjs`;
 
 const generateId = () => Math.random().toString(36).substring(2, 9);
 
-const MODEL_NAME = "gemini-2.0-flash-exp"; 
+// CAMBIO: Usamos Gemini 2.0 Flash. 
+// El modelo 'preview' (gemini-3) tiene límite de 20/día.
+// Este modelo (gemini-2.0-flash) tiene límite de ~1500/día en el plan gratuito.
+const MODEL_NAME = "gemini-2.0-flash"; 
 
 // --- UTILIDADES ---
 
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-// Función inteligente para obtener la API Key
-const getEffectiveApiKey = async (): Promise<string | null> => {
-    // 1. Prioridad Máxima: Clave personal guardada en el navegador del usuario
-    const localKey = localStorage.getItem('user_gemini_key');
-    if (localKey) return localKey;
-
-    // 2. Prioridad Media: Clave del sistema (variables de entorno)
-    const envKey = process.env.API_KEY;
-    // Si existe y no es un placeholder, la usamos, PERO intentamos ver si hay una en la nube que la reemplace
-    // (Útil para rotar claves sin redesplegar)
-    
-    try {
-        // 3. Consultar Firestore para ver si hay una "Global Key" compartida
-        const docRef = doc(db, "settings", "global_config");
-        const docSnap = await getDoc(docRef);
-        
-        if (docSnap.exists() && docSnap.data().apiKey) {
-            return docSnap.data().apiKey;
-        }
-    } catch (e) {
-        console.warn("No se pudo obtener la clave global de la nube:", e);
-    }
-
-    // Si no hay en la nube, devolvemos la del entorno
-    return envKey || null;
-};
 
 const compressImage = (base64Str: string, mimeType: string): Promise<string> => {
   return new Promise((resolve, reject) => {
@@ -118,9 +91,10 @@ export const parseFileToQuiz = async (
     onProgress?: (msg: string, percent: number) => void
 ): Promise<Question[]> => {
     
-  const apiKey = await getEffectiveApiKey();
+  // CLAVE DIRECTA DEL ENTORNO
+  const apiKey = process.env.API_KEY;
 
-  if (!apiKey) throw new Error("Falta la API Key. Configúrala en Ajustes.");
+  if (!apiKey || apiKey.includes("TU_CLAVE")) throw new Error("Falta la API Key en el servidor (.env).");
 
   const ai = new GoogleGenAI({ apiKey: apiKey });
   let contentToSend: any = null;
@@ -263,7 +237,7 @@ export const parseFileToQuiz = async (
   }
 
   if (lastError?.message === "QUOTA_EXCEEDED" || lastError?.message?.includes("429")) {
-      throw new Error("⚠️ El sistema gratuito está saturado. Añade una API Key en Configuración.");
+      throw new Error("⚠️ Servidor saturado (Límite diario alcanzado). Inténtalo mañana.");
   }
   
   throw new Error("No se pudo analizar. Inténtalo de nuevo.");
