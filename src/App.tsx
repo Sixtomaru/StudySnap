@@ -43,8 +43,7 @@ import {
   Trophy,
   Calendar,
   Image as ImageIcon,
-  Flag,
-  PlusSquare
+  Flag
 } from 'lucide-react';
 import { signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { auth, googleProvider } from './services/firebaseConfig';
@@ -147,55 +146,6 @@ const ConfirmationModal = ({
     );
 };
 
-// Modal simple para saltar a una pregunta
-const JumpToQuestionModal = ({ 
-    isOpen, 
-    totalQuestions, 
-    onJump, 
-    onCancel 
-}: { 
-    isOpen: boolean; 
-    totalQuestions: number; 
-    onJump: (index: number) => void; 
-    onCancel: () => void;
-}) => {
-    const [val, setVal] = useState('');
-    
-    if (!isOpen) return null;
-
-    const handleSubmit = (e?: React.FormEvent) => {
-        e?.preventDefault();
-        const num = parseInt(val);
-        if (!isNaN(num) && num >= 1 && num <= totalQuestions) {
-            onJump(num - 1);
-        }
-    };
-
-    return (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-             <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-xs p-6 border border-slate-100 dark:border-slate-700 animate-in zoom-in-95">
-                 <h3 className="font-bold text-lg text-slate-800 dark:text-white mb-4 text-center">Ir a la pregunta</h3>
-                 <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-                     <Input 
-                        autoFocus 
-                        type="number" 
-                        min={1} 
-                        max={totalQuestions} 
-                        placeholder={`1 - ${totalQuestions}`}
-                        value={val}
-                        onChange={e => setVal(e.target.value)}
-                        className="text-center text-xl tracking-widest font-bold dark:bg-slate-700 dark:text-white"
-                     />
-                     <div className="grid grid-cols-2 gap-2">
-                         <Button variant="ghost" onClick={onCancel} type="button">Cancelar</Button>
-                         <Button type="submit" disabled={!val}>Ir</Button>
-                     </div>
-                 </form>
-             </div>
-        </div>
-    );
-};
-
 const ListSelectionModal = ({ user, onSelect, onCancel }: { user: User, onSelect: (testId: string | null, title?: string) => void, onCancel: () => void }) => {
   const [tests, setTests] = useState<Test[]>([]);
   const [loading, setLoading] = useState(true);
@@ -248,8 +198,6 @@ const ListSelectionModal = ({ user, onSelect, onCancel }: { user: User, onSelect
     </div>
   );
 };
-
-// ... Pages and Components remain the same until HomePage ...
 
 const SettingsPage = () => {
   const { isDark, toggle } = useDarkMode();
@@ -428,21 +376,13 @@ const HistoryPage = ({ user }: { user: User }) => {
 const HomePage = ({ user }: { user: User }) => {
   const [tests, setTests] = useState<Test[]>([]);
   const [loading, setLoading] = useState(true);
-  const [toast, setToast] = useState<{msg: string, type: 'success'|'error'|'info'} | null>(null);
   const navigate = useNavigate();
-  const location = useLocation();
   // Estado para bloquear clicks mientras se crea el enlace
   const [creatingLink, setCreatingLink] = useState(false);
 
   useEffect(() => {
     loadTests();
-    // Mostrar mensaje si venimos de importar
-    if (location.state?.message) {
-        setToast({ msg: location.state.message, type: 'success' });
-        // Limpiamos el state para que no salga al refrescar (opcional, pero limpio)
-        window.history.replaceState({}, document.title);
-    }
-  }, [user, location]);
+  }, [user]);
 
   const loadTests = async () => {
     setLoading(true);
@@ -479,11 +419,11 @@ const HomePage = ({ user }: { user: User }) => {
         } else {
             // Fallback
             await navigator.clipboard.writeText(url);
-            setToast({ msg: "Enlace copiado al portapapeles", type: "success" });
+            alert("Enlace público copiado al portapapeles. ¡Cualquiera puede importarlo!");
         }
     } catch (err: any) {
         console.error("Error compartiendo:", err);
-        setToast({ msg: "Error al compartir", type: "error" });
+        alert("No se pudo crear el enlace compartido. Intenta de nuevo.");
     } finally {
         setCreatingLink(false);
     }
@@ -491,8 +431,6 @@ const HomePage = ({ user }: { user: User }) => {
 
   return (
     <div className="space-y-8 animate-in fade-in zoom-in-95 duration-300">
-      {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
-      
       <header className="flex justify-between items-center bg-white/80 dark:bg-slate-800/80 backdrop-blur-md p-6 rounded-2xl shadow-sm border border-white/50 dark:border-slate-700 md:hidden">
         <div className="flex items-center gap-4">
           <div className="bg-brand-100 dark:bg-slate-700 p-3 rounded-full border border-brand-200 dark:border-slate-600 shadow-sm">
@@ -624,7 +562,7 @@ const SharePage = ({ user }: { user: User }) => {
   );
 };
 
-// --- Editor Page (Paginada y Compacta) ---
+// --- Editor Page (Reconstructed) ---
 const EditorPage = ({ user }: { user: User }) => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -633,27 +571,13 @@ const EditorPage = ({ user }: { user: User }) => {
   const [saving, setSaving] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [progress, setProgress] = useState({ msg: '', percent: 0 });
-  const [currentIndex, setCurrentIndex] = useState(0); // Para paginación
-  const [showJumpModal, setShowJumpModal] = useState(false); // Modal de salto
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!id) return;
     storageService.getTestById(id).then(t => {
-       if (t && t.userId === user.uid) {
-           setTest(t);
-           // Si no hay preguntas, añadir una dummy para empezar
-           if(t.questions.length === 0) {
-               const dummy: Question = {
-                  id: generateId(),
-                  text: 'Nueva pregunta',
-                  options: [{ id: generateId(), text: 'Opción 1' }, { id: generateId(), text: 'Opción 2' }],
-                  correctOptionId: ''
-               };
-               setTest({...t, questions: [dummy]});
-           }
-       }
-       else navigate('/'); 
+       if (t && t.userId === user.uid) setTest(t);
+       else navigate('/'); // No access or not found
        setLoading(false);
     });
   }, [id, user]);
@@ -675,11 +599,7 @@ const EditorPage = ({ user }: { user: User }) => {
       reader.onload = async (ev) => {
          const base64 = (ev.target?.result as string).split(',')[1];
          const questions = await parseFileToQuiz(base64, file.type, (msg, p) => setProgress({msg, percent: p}));
-         // Añadir preguntas al final y saltar a la primera nueva
-         const newQs = [...test.questions, ...questions];
-         // Si la primera pregunta era dummy (vacía), reemplazarla si es posible
-         setTest(prev => prev ? ({ ...prev, questions: newQs }) : null);
-         setCurrentIndex(test.questions.length); // Saltar a la primera importada
+         setTest(prev => prev ? ({ ...prev, questions: [...prev.questions, ...questions] }) : null);
       };
       reader.readAsDataURL(file);
     } catch (err: any) {
@@ -690,66 +610,29 @@ const EditorPage = ({ user }: { user: User }) => {
     }
   };
 
-  const deleteCurrentQuestion = () => {
-      if (!test) return;
-      const newQs = test.questions.filter((_, idx) => idx !== currentIndex);
-      // Si borramos la última, ir a la anterior
-      let nextIndex = currentIndex;
-      if (nextIndex >= newQs.length) nextIndex = Math.max(0, newQs.length - 1);
-      
-      // Si nos quedamos sin preguntas, añadir una vacía
-      if (newQs.length === 0) {
-           const dummy: Question = {
-              id: generateId(),
-              text: '',
-              options: [{ id: generateId(), text: '' }, { id: generateId(), text: '' }],
-              correctOptionId: ''
-           };
-           newQs.push(dummy);
-           nextIndex = 0;
-      }
-      
-      setTest({ ...test, questions: newQs });
-      setCurrentIndex(nextIndex);
+  const deleteQuestion = (qId: string) => {
+      setTest(prev => prev ? ({ ...prev, questions: prev.questions.filter(q => q.id !== qId) }) : null);
   };
 
   const addQuestion = () => {
       const newQ: Question = {
           id: generateId(),
-          text: '',
+          text: 'Nueva pregunta',
           options: [
-              { id: generateId(), text: '' },
-              { id: generateId(), text: '' }
+              { id: generateId(), text: 'Opción 1' },
+              { id: generateId(), text: 'Opción 2' }
           ],
           correctOptionId: ''
       };
       setTest(prev => prev ? ({ ...prev, questions: [...prev.questions, newQ] }) : null);
-      setCurrentIndex(prev => (test ? test.questions.length : 0)); // Ir a la nueva (que estará al final)
-  };
-
-  const goToQuestion = (idx: number) => {
-      if (idx >= 0 && idx < (test?.questions.length || 0)) {
-          setCurrentIndex(idx);
-          setShowJumpModal(false);
-      }
   };
 
   if (loading) return <div className="flex justify-center pt-20"><Loader2 className="animate-spin text-brand-600" size={40} /></div>;
   if (!test) return <div>Test no encontrado</div>;
 
-  const currentQ = test.questions[currentIndex];
-  const totalQ = test.questions.length;
-
   return (
     <div className="pb-20 animate-in fade-in zoom-in-95">
-       <JumpToQuestionModal 
-           isOpen={showJumpModal} 
-           totalQuestions={totalQ} 
-           onJump={goToQuestion} 
-           onCancel={() => setShowJumpModal(false)} 
-       />
-
-       <header className="sticky top-0 bg-slate-50 dark:bg-slate-900 z-20 py-4 flex justify-between items-center mb-2 backdrop-blur-sm bg-opacity-90">
+       <header className="sticky top-0 bg-slate-50 dark:bg-slate-900 z-20 py-4 flex justify-between items-center mb-4 backdrop-blur-sm bg-opacity-90">
           <button onClick={() => navigate('/')} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full text-slate-700 dark:text-slate-300"><ArrowLeft /></button>
           <div className="flex gap-2">
              <input type="file" ref={fileInputRef} className="hidden" accept="image/*,.pdf" onChange={handleFileUpload} />
@@ -762,7 +645,7 @@ const EditorPage = ({ user }: { user: User }) => {
           </div>
        </header>
        
-       <div className="mb-4">
+       <div className="mb-6">
           <Input 
              value={test.title} 
              onChange={e => setTest({...test, title: e.target.value})} 
@@ -771,134 +654,74 @@ const EditorPage = ({ user }: { user: User }) => {
           />
        </div>
 
-       {/* --- NAVIGATION BAR COMPACTA --- */}
-       <div className="bg-white dark:bg-slate-800 p-2 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 mb-6 flex items-center justify-between gap-1 sticky top-16 z-10">
-           {/* Doble Izquierda: Inicio */}
-           <button 
-             onClick={() => setCurrentIndex(0)} 
-             disabled={currentIndex === 0}
-             className="w-9 h-9 flex items-center justify-center rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 transition-colors"
-           >
-             <ChevronsLeft size={20} />
-           </button>
-           
-           {/* Izquierda: Anterior */}
-           <button 
-             onClick={() => setCurrentIndex(Math.max(0, currentIndex - 1))} 
-             disabled={currentIndex === 0}
-             className="w-9 h-9 flex items-center justify-center rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 transition-colors"
-           >
-             <ChevronLeft size={20} />
-           </button>
-
-           {/* Indicador Central (Botón para saltar) */}
-           <button 
-              onClick={() => setShowJumpModal(true)}
-              className="flex-1 text-center font-bold text-brand-600 dark:text-brand-400 bg-brand-50 dark:bg-slate-700/50 py-1.5 rounded-md text-sm mx-1 hover:bg-brand-100 dark:hover:bg-slate-700 transition-colors truncate"
-           >
-              {currentIndex + 1} / {totalQ}
-           </button>
-
-           {/* Derecha: Siguiente */}
-           <button 
-             onClick={() => setCurrentIndex(Math.min(totalQ - 1, currentIndex + 1))} 
-             disabled={currentIndex === totalQ - 1}
-             className="w-9 h-9 flex items-center justify-center rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 transition-colors"
-           >
-             <ChevronRight size={20} />
-           </button>
-
-           {/* Doble Derecha: Final */}
-           <button 
-             onClick={() => setCurrentIndex(totalQ - 1)} 
-             disabled={currentIndex === totalQ - 1}
-             className="w-9 h-9 flex items-center justify-center rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 transition-colors"
-           >
-             <ChevronsRight size={20} />
-           </button>
-
-            {/* Añadir (+) */}
-           <button 
-             onClick={addQuestion} 
-             className="w-9 h-9 flex items-center justify-center rounded-lg bg-brand-600 text-white shadow-md shadow-brand-200 dark:shadow-none hover:bg-brand-700 transition-colors ml-1"
-           >
-             <Plus size={20} />
-           </button>
-       </div>
-
-       {/* --- EDITOR DE PREGUNTA ACTUAL --- */}
-       {currentQ && (
-           <Card className="relative group dark:bg-slate-800 dark:border-slate-700 min-h-[50vh] flex flex-col">
-               <div className="flex justify-between items-center mb-2">
-                   <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Pregunta</span>
-                   <button onClick={deleteCurrentQuestion} className="text-slate-400 hover:text-red-500 p-2 hover:bg-red-50 dark:hover:bg-slate-700 rounded-lg transition-colors">
-                       <Trash2 size={18}/>
-                   </button>
-               </div>
-               
-               <TextArea 
-                  value={currentQ.text} 
-                  onChange={e => {
-                      const newQs = [...test.questions];
-                      newQs[currentIndex].text = e.target.value;
-                      setTest({...test, questions: newQs});
-                  }}
-                  className="w-full text-lg font-medium bg-slate-50 dark:bg-slate-900 border-none p-4 rounded-xl focus:ring-2 focus:ring-brand-500 mb-6 flex-1 min-h-[120px]"
-                  placeholder="Escribe la pregunta..."
-               />
-               
-               <div className="space-y-3">
-                   <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">Respuestas (Marca la correcta)</span>
-                   {currentQ.options.map((opt, oIdx) => (
-                       <div key={opt.id} className="flex items-center gap-2 group/opt">
-                           <button 
-                             onClick={() => {
-                                 const newQs = [...test.questions];
-                                 newQs[currentIndex].correctOptionId = opt.id;
-                                 setTest({...test, questions: newQs});
-                             }}
-                             className={`w-10 h-10 flex-shrink-0 flex items-center justify-center rounded-full border-2 transition-all ${currentQ.correctOptionId === opt.id ? 'bg-green-500 border-green-500 text-white shadow-md shadow-green-200 dark:shadow-none' : 'border-slate-300 text-transparent hover:border-brand-400 dark:border-slate-600'}`}
-                           >
-                               <CheckCircle size={20} fill="currentColor" className={currentQ.correctOptionId === opt.id ? 'opacity-100' : 'opacity-0 group-hover/opt:opacity-50'} />
-                           </button>
-                           
-                           <div className="flex-1 relative">
-                               <div className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 w-4">{String.fromCharCode(65 + oIdx)}</div>
+       <div className="space-y-6">
+           {test.questions.map((q, idx) => (
+               <Card key={q.id} className="relative group dark:bg-slate-800 dark:border-slate-700">
+                   <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                       <button onClick={() => deleteQuestion(q.id)} className="text-red-400 hover:text-red-600"><Trash2 size={18}/></button>
+                   </div>
+                   <div className="mb-4 pr-8">
+                       <span className="text-xs font-bold text-slate-400 block mb-1">Pregunta {idx + 1}</span>
+                       <TextArea 
+                          value={q.text} 
+                          onChange={e => {
+                              const newQs = [...test.questions];
+                              newQs[idx].text = e.target.value;
+                              setTest({...test, questions: newQs});
+                          }}
+                          className="w-full text-lg font-medium bg-transparent border-none p-0 focus:ring-0 text-slate-800 dark:text-white"
+                          rows={2}
+                          placeholder="Escribe la pregunta..."
+                       />
+                   </div>
+                   <div className="space-y-2">
+                       {q.options.map((opt, oIdx) => (
+                           <div key={opt.id} className="flex items-center gap-2">
+                               <button 
+                                 onClick={() => {
+                                     const newQs = [...test.questions];
+                                     newQs[idx].correctOptionId = opt.id;
+                                     setTest({...test, questions: newQs});
+                                 }}
+                                 className={`p-2 rounded-full border transition-colors ${q.correctOptionId === opt.id ? 'bg-green-500 border-green-500 text-white' : 'border-slate-300 text-transparent hover:border-brand-400 dark:border-slate-600'}`}
+                               >
+                                   <CheckCircle size={16} />
+                               </button>
                                <Input 
                                   value={opt.text}
                                   onChange={e => {
                                       const newQs = [...test.questions];
-                                      newQs[currentIndex].options[oIdx].text = e.target.value;
+                                      newQs[idx].options[oIdx].text = e.target.value;
                                       setTest({...test, questions: newQs});
                                   }}
-                                  className="pl-8 py-3 text-sm w-full dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                                  className="py-2 text-sm flex-1 dark:bg-slate-700 dark:border-slate-600 dark:text-white"
                                   placeholder={`Opción ${oIdx + 1}`}
                                />
+                               <button 
+                                 onClick={() => {
+                                     const newQs = [...test.questions];
+                                     newQs[idx].options = q.options.filter(o => o.id !== opt.id);
+                                     setTest({...test, questions: newQs});
+                                 }}
+                                 className="text-slate-300 hover:text-red-400"
+                               >
+                                   <X size={16} />
+                               </button>
                            </div>
-
-                           <button 
-                             onClick={() => {
-                                 const newQs = [...test.questions];
-                                 newQs[currentIndex].options = currentQ.options.filter(o => o.id !== opt.id);
-                                 setTest({...test, questions: newQs});
-                             }}
-                             className="w-8 h-8 flex items-center justify-center text-slate-300 hover:text-red-400 hover:bg-red-50 dark:hover:bg-slate-700 rounded-lg transition-colors"
-                           >
-                               <X size={18} />
-                           </button>
-                       </div>
-                   ))}
-                   
-                   <Button variant="ghost" size="sm" onClick={() => {
-                       const newQs = [...test.questions];
-                       newQs[currentIndex].options.push({id: generateId(), text: ''});
-                       setTest({...test, questions: newQs});
-                   }} className="w-full border-2 border-dashed border-slate-200 dark:border-slate-700 py-3 mt-2 hover:border-brand-300 text-slate-400 hover:text-brand-600">
-                       + Añadir otra opción
-                   </Button>
-               </div>
-           </Card>
-       )}
+                       ))}
+                       <Button variant="ghost" size="sm" onClick={() => {
+                           const newQs = [...test.questions];
+                           newQs[idx].options.push({id: generateId(), text: ''});
+                           setTest({...test, questions: newQs});
+                       }} className="text-brand-600 dark:text-brand-400">+ Opción</Button>
+                   </div>
+               </Card>
+           ))}
+       </div>
+       
+       <div className="mt-8 text-center">
+           <Button variant="secondary" onClick={addQuestion} className="w-full py-4 border-dashed border-2 dark:border-slate-700 dark:bg-slate-800/50">+ Añadir Pregunta Manualmente</Button>
+       </div>
     </div>
   );
 };

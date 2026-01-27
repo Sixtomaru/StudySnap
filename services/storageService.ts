@@ -8,7 +8,8 @@ import {
   getDocs, 
   deleteDoc, 
   query, 
-  where
+  where,
+  addDoc
 } from 'firebase/firestore';
 
 export const storageService = {
@@ -28,7 +29,6 @@ export const storageService = {
   getTests: async (userId: string): Promise<Test[]> => {
     try {
       if (!userId) return [];
-      // Filtramos por userId sin orderBy para evitar errores de índice "Missing Index" en Firestore
       const q = query(
         collection(db, "tests"), 
         where("userId", "==", userId)
@@ -38,7 +38,6 @@ export const storageService = {
       querySnapshot.forEach((doc) => {
         tests.push(doc.data() as Test);
       });
-      // Ordenamos en el cliente (JavaScript)
       return tests.sort((a, b) => b.createdAt - a.createdAt);
     } catch (e) {
       console.error("Error obteniendo tests: ", e);
@@ -46,7 +45,7 @@ export const storageService = {
     }
   },
 
-  // Obtener un test por ID (Público para compartir, si las reglas de Firebase lo permiten)
+  // Obtener un test privado por ID (Solo funciona si eres el dueño)
   getTestById: async (id: string): Promise<Test | undefined> => {
     try {
       const docRef = doc(db, "tests", id);
@@ -62,19 +61,63 @@ export const storageService = {
     }
   },
 
-  // Copiar un test de otro usuario al usuario actual
-  copyTest: async (originalTestId: string, newUserId: string): Promise<string> => {
-      const original = await storageService.getTestById(originalTestId);
+  // --- LÓGICA DE COMPARTIR (SNAPSHOTS PÚBLICOS) ---
+
+  // 1. Crear una COPIA PÚBLICA del test en la colección 'shares'
+  createPublicShare: async (testId: string): Promise<string> => {
+      // Leemos el test original (como dueño)
+      const original = await storageService.getTestById(testId);
       if (!original) throw new Error("Test original no encontrado");
 
-      const newId = Math.random().toString(36).substring(2, 9);
-      const newTest: Test = {
+      // Preparamos la copia pública
+      // Generamos un ID nuevo aleatorio para el enlace compartido
+      const shareId = Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 10);
+      
+      const sharedTest = {
           ...original,
+          id: shareId, // El ID ahora es el del share
+          originalId: testId, // Guardamos referencia por si acaso
+          sharedAt: Date.now()
+          // Mantenemos las preguntas y título, pero esto se guardará en 'shares'
+      };
+
+      // Guardamos en la colección 'shares'. 
+      // IMPORTANTE: Requiere reglas de seguridad 'allow read: if true' en /shares/{shareId}
+      await setDoc(doc(db, "shares", shareId), sharedTest);
+      return shareId;
+  },
+
+  // 2. Leer un test de la colección 'shares' (Público)
+  getSharedTest: async (shareId: string): Promise<Test | undefined> => {
+      try {
+        const docRef = doc(db, "shares", shareId);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          return docSnap.data() as Test;
+        }
+        return undefined;
+      } catch (e) {
+        console.error("Error leyendo test compartido:", e);
+        return undefined;
+      }
+  },
+
+  // 3. Importar un test compartido a mis listas privadas
+  importTest: async (testData: Test, newUserId: string): Promise<string> => {
+      const newId = Math.random().toString(36).substring(2, 9);
+      
+      // Creamos una copia limpia para el nuevo usuario
+      const newTest: Test = {
+          ...testData,
           id: newId,
           userId: newUserId,
-          title: `${original.title} (Copia)`,
+          title: testData.title, // Mantenemos el título original (más limpio)
           createdAt: Date.now()
       };
+      
+      // Limpiamos campos residuales de metadatos del share
+      if ((newTest as any).sharedAt) delete (newTest as any).sharedAt;
+      if ((newTest as any).originalId) delete (newTest as any).originalId;
       
       await setDoc(doc(db, "tests", newId), newTest);
       return newId;
@@ -92,7 +135,6 @@ export const storageService = {
 
   // --- Resultados / Historial ---
 
-  // Guardar resultado
   saveResult: async (result: TestResult): Promise<void> => {
     try {
       await setDoc(doc(db, "results", result.id), result);
@@ -102,11 +144,9 @@ export const storageService = {
     }
   },
 
-  // Obtener historial DE UN USUARIO
   getResults: async (userId: string): Promise<TestResult[]> => {
     try {
       if (!userId) return [];
-      // Filtramos por userId sin orderBy para evitar errores de índice
       const q = query(
         collection(db, "results"), 
         where("userId", "==", userId)
@@ -116,7 +156,6 @@ export const storageService = {
       querySnapshot.forEach((doc) => {
         results.push(doc.data() as TestResult);
       });
-      // Ordenamos en el cliente
       return results.sort((a, b) => b.date - a.date);
     } catch (e) {
       console.error("Error obteniendo resultados: ", e);
@@ -124,7 +163,6 @@ export const storageService = {
     }
   },
 
-  // Obtener resultado por ID
   getResultById: async (id: string): Promise<TestResult | undefined> => {
     try {
       const docRef = doc(db, "results", id);
@@ -140,7 +178,6 @@ export const storageService = {
     }
   },
 
-  // Borrar resultado individual
   deleteResult: async (id: string): Promise<void> => {
     try {
       await deleteDoc(doc(db, "results", id));
@@ -150,7 +187,6 @@ export const storageService = {
     }
   },
 
-  // Borrar TODOS los resultados de un usuario
   deleteAllResults: async (userId: string): Promise<void> => {
     try {
       const q = query(collection(db, "results"), where("userId", "==", userId));

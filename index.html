@@ -68,13 +68,13 @@
     -webkit-user-select: text;
   }
   
-  /* Ocultar Scrollbar pero permitir scroll */
-  .scrollbar-hide::-webkit-scrollbar {
-      display: none;
+  /* Ocultar Scrollbar GLOBALMENTE */
+  * {
+      -ms-overflow-style: none; /* IE and Edge */
+      scrollbar-width: none; /* Firefox */
   }
-  .scrollbar-hide {
-      -ms-overflow-style: none;
-      scrollbar-width: none;
+  *::-webkit-scrollbar {
+      display: none; /* Chrome, Safari and Opera */
   }
 </style>
 <link rel="stylesheet" href="/index.css">
