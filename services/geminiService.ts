@@ -2,18 +2,47 @@ import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
 import { Question } from "../types";
 // @ts-ignore
 import * as pdfjsLib from 'pdfjs-dist';
+// Importamos la DB para leer la clave global
+import { db } from './firebaseConfig';
+import { doc, getDoc } from 'firebase/firestore';
 
 // Configurar el worker de PDF.js desde CDN
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://esm.sh/pdfjs-dist@4.0.379/build/pdf.worker.min.mjs`;
 
 const generateId = () => Math.random().toString(36).substring(2, 9);
 
-// Usamos gemini-2.0-flash-exp que es muy rápido y soporta visión
 const MODEL_NAME = "gemini-2.0-flash-exp"; 
 
 // --- UTILIDADES ---
 
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Función inteligente para obtener la API Key
+const getEffectiveApiKey = async (): Promise<string | null> => {
+    // 1. Prioridad Máxima: Clave personal guardada en el navegador del usuario
+    const localKey = localStorage.getItem('user_gemini_key');
+    if (localKey) return localKey;
+
+    // 2. Prioridad Media: Clave del sistema (variables de entorno)
+    const envKey = process.env.API_KEY;
+    // Si existe y no es un placeholder, la usamos, PERO intentamos ver si hay una en la nube que la reemplace
+    // (Útil para rotar claves sin redesplegar)
+    
+    try {
+        // 3. Consultar Firestore para ver si hay una "Global Key" compartida
+        const docRef = doc(db, "settings", "global_config");
+        const docSnap = await getDoc(docRef);
+        
+        if (docSnap.exists() && docSnap.data().apiKey) {
+            return docSnap.data().apiKey;
+        }
+    } catch (e) {
+        console.warn("No se pudo obtener la clave global de la nube:", e);
+    }
+
+    // Si no hay en la nube, devolvemos la del entorno
+    return envKey || null;
+};
 
 const compressImage = (base64Str: string, mimeType: string): Promise<string> => {
   return new Promise((resolve, reject) => {
@@ -24,7 +53,7 @@ const compressImage = (base64Str: string, mimeType: string): Promise<string> => 
       let width = img.width;
       let height = img.height;
       
-      const MAX_SIZE = 1024; // Aumentamos un poco la calidad para que lea mejor las columnas
+      const MAX_SIZE = 1024; 
       if (width > height) {
         if (width > MAX_SIZE) {
           height *= MAX_SIZE / width;
@@ -45,7 +74,6 @@ const compressImage = (base64Str: string, mimeType: string): Promise<string> => 
           return;
       }
       ctx.drawImage(img, 0, 0, width, height);
-      // Calidad 0.6
       const newDataUrl = canvas.toDataURL('image/jpeg', 0.6);
       resolve(newDataUrl.split(',')[1]);
     };
@@ -90,17 +118,13 @@ export const parseFileToQuiz = async (
     onProgress?: (msg: string, percent: number) => void
 ): Promise<Question[]> => {
     
-  // Priorizar la clave del usuario si existe en localStorage
-  const userKey = localStorage.getItem('user_gemini_key');
-  const systemKey = process.env.API_KEY;
-  const apiKey = userKey || systemKey;
+  const apiKey = await getEffectiveApiKey();
 
-  if (!apiKey) throw new Error("Falta la API Key.");
+  if (!apiKey) throw new Error("Falta la API Key. Configúrala en Ajustes.");
 
   const ai = new GoogleGenAI({ apiKey: apiKey });
   let contentToSend: any = null;
 
-  // Preparación del contenido
   if (mimeType.includes('pdf')) {
     if (onProgress) onProgress("Procesando PDF...", 10);
     const extractedText = await extractTextFromPDF(base64Data, onProgress);
@@ -124,10 +148,8 @@ export const parseFileToQuiz = async (
 
   if (onProgress) onProgress("La IA está leyendo el examen...", 60);
 
-  // Prompt mejorado para el "Caos" de formatos
   const systemInstruction = `
     You are an expert exam parser. Your goal is to extract multiple-choice questions from the provided image or text.
-    
     STRICT RULES:
     1. Output MUST be a valid JSON array.
     2. Handle mixed layouts (columns, messy text).
@@ -165,7 +187,7 @@ export const parseFileToQuiz = async (
         config: {
           systemInstruction: systemInstruction,
           responseMimeType: "application/json",
-          temperature: 0.1, // Baja temperatura para ser preciso
+          temperature: 0.1, 
           responseSchema: {
             type: Type.ARRAY,
             items: {
@@ -187,7 +209,6 @@ export const parseFileToQuiz = async (
       if (!responseText) throw new Error("Respuesta vacía");
 
       let jsonString = responseText.trim();
-      // Limpieza de bloques de código Markdown si los hubiera
       if (jsonString.startsWith('```json')) jsonString = jsonString.replace(/^```json/, '').replace(/```$/, '').trim();
       else if (jsonString.startsWith('```')) jsonString = jsonString.replace(/^```/, '').replace(/```$/, '').trim();
 
@@ -198,18 +219,14 @@ export const parseFileToQuiz = async (
 
       return rawData.map((item: any) => {
         let cleanText = item.q || "Sin pregunta";
-        
-        // Limpieza extra del texto de la pregunta por si la IA dejó el número
         cleanText = cleanText.replace(/^(\d+[\.\)\-]\s*)+/, "").trim();
 
         const options = (item.o || []).map((optText: string) => ({
           id: generateId(),
-          // Limpieza extra de las opciones (a), b)...)
           text: optText.replace(/^([a-zA-Z][\.\)\-]\s*)+/, "").trim()
         }));
 
         let correctOptionId = "";
-        // Si la IA detectó la respuesta correcta (marcada en el examen), la asignamos
         if (typeof item.c === 'number' && item.c >= 0 && item.c < options.length) {
           correctOptionId = options[item.c].id;
         }
@@ -232,11 +249,9 @@ export const parseFileToQuiz = async (
       }
 
       if (msg.includes("429") || msg.includes("503") || msg.includes("quota") || msg.includes("exhausted")) {
-         // Si es el último intento y falló por quota
          if (attempt === MAX_RETRIES) {
              throw new Error("QUOTA_EXCEEDED");
          }
-         // Espera exponencial
          const delay = 4000 * attempt;
          if (onProgress) onProgress(`Servidor ocupado. Esperando...`, 65);
          await wait(delay);
@@ -248,8 +263,7 @@ export const parseFileToQuiz = async (
   }
 
   if (lastError?.message === "QUOTA_EXCEEDED" || lastError?.message?.includes("429")) {
-      // Mensaje específico que instruye al usuario a usar su propia clave
-      throw new Error("⚠️ El sistema gratuito está saturado. Por favor, ve a Configuración y añade tu propia API Key (es gratis) para continuar sin límites.");
+      throw new Error("⚠️ El sistema gratuito está saturado. Añade una API Key en Configuración.");
   }
   
   throw new Error("No se pudo analizar. Inténtalo de nuevo.");
