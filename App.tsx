@@ -32,14 +32,15 @@ import {
   Upload,
   Share2,
   Download,
-  Menu
+  Menu,
+  Key
 } from 'lucide-react';
 import { signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { auth, googleProvider } from './services/firebaseConfig';
 import { Button, Card, Input, TextArea, Badge } from './components/UI';
 import { storageService } from './services/storageService';
-// CAMBIO IMPORTANTE: Usamos el servicio OCR local en lugar de Gemini AI
-import { parseFileToQuiz } from './services/ocrService';
+// CAMBIO: Volvemos a la IA porque el OCR local falló en calidad
+import { parseFileToQuiz } from './services/geminiService';
 import { Test, Question, Option, TestResult, AnswerDetail } from './types';
 
 // --- Utils ---
@@ -170,6 +171,14 @@ const ListSelectionModal = ({
 const SettingsPage = () => {
   const { isDark, toggle } = useDarkMode();
   const navigate = useNavigate();
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem('user_gemini_key') || '');
+  const [showSaveMsg, setShowSaveMsg] = useState(false);
+
+  const handleSaveKey = () => {
+    localStorage.setItem('user_gemini_key', apiKey.trim());
+    setShowSaveMsg(true);
+    setTimeout(() => setShowSaveMsg(false), 2000);
+  };
 
   return (
     <div className="pb-24 max-w-lg mx-auto p-4 animate-in fade-in zoom-in-95 duration-300">
@@ -180,28 +189,64 @@ const SettingsPage = () => {
 
       <h1 className="hidden md:block font-bold text-3xl text-slate-800 dark:text-white mb-8">Configuración</h1>
 
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
-        <div className="p-6 flex items-center justify-between border-b border-slate-100 dark:border-slate-700">
-           <div className="flex items-center gap-4">
-             <div className="bg-brand-50 dark:bg-slate-700 p-3 rounded-xl text-brand-600 dark:text-brand-400">
-               {isDark ? <Moon size={24} /> : <Sun size={24} />}
-             </div>
-             <div>
-               <h3 className="font-bold text-lg text-slate-800 dark:text-white">Modo Oscuro</h3>
-               <p className="text-sm text-slate-500 dark:text-slate-400">Cambiar entre tema claro y oscuro</p>
-             </div>
-           </div>
-           
-           <button 
-             onClick={toggle}
-             className={`w-14 h-8 rounded-full p-1 transition-colors duration-300 ease-in-out ${isDark ? 'bg-brand-600' : 'bg-slate-200'}`}
-           >
-             <div className={`bg-white w-6 h-6 rounded-full shadow-sm transform transition-transform duration-300 ${isDark ? 'translate-x-6' : 'translate-x-0'}`} />
-           </button>
+      <div className="space-y-6">
+        {/* Modo Oscuro */}
+        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
+          <div className="p-6 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="bg-brand-50 dark:bg-slate-700 p-3 rounded-xl text-brand-600 dark:text-brand-400">
+                {isDark ? <Moon size={24} /> : <Sun size={24} />}
+              </div>
+              <div>
+                <h3 className="font-bold text-lg text-slate-800 dark:text-white">Modo Oscuro</h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400">Cambiar entre tema claro y oscuro</p>
+              </div>
+            </div>
+            
+            <button 
+              onClick={toggle}
+              className={`w-14 h-8 rounded-full p-1 transition-colors duration-300 ease-in-out ${isDark ? 'bg-brand-600' : 'bg-slate-200'}`}
+            >
+              <div className={`bg-white w-6 h-6 rounded-full shadow-sm transform transition-transform duration-300 ${isDark ? 'translate-x-6' : 'translate-x-0'}`} />
+            </button>
+          </div>
+        </div>
+
+        {/* API Key Personal */}
+        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
+          <div className="p-6">
+            <div className="flex items-center gap-4 mb-4">
+              <div className="bg-yellow-50 dark:bg-yellow-900/20 p-3 rounded-xl text-yellow-600 dark:text-yellow-400">
+                <Key size={24} />
+              </div>
+              <div>
+                <h3 className="font-bold text-lg text-slate-800 dark:text-white">Tu Propia API Key (Opcional)</h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400">Si la app te da error de "saturado", usa tu propia clave gratuita.</p>
+              </div>
+            </div>
+            
+            <div className="space-y-3">
+               <Input 
+                 type="password" 
+                 placeholder="Pega aquí tu API Key de Google AI Studio"
+                 value={apiKey}
+                 onChange={(e) => setApiKey(e.target.value)}
+                 className="dark:bg-slate-900 dark:border-slate-600 dark:text-white"
+               />
+               <div className="flex justify-between items-center">
+                 <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-xs text-brand-600 dark:text-brand-400 font-bold hover:underline flex items-center gap-1">
+                   Obtener Clave Gratis <ExternalLink size={12}/>
+                 </a>
+                 <Button onClick={handleSaveKey} disabled={showSaveMsg} className="text-sm py-1.5 px-4">
+                    {showSaveMsg ? "Guardado!" : "Guardar Clave"}
+                 </Button>
+               </div>
+            </div>
+          </div>
         </div>
       </div>
       
-      <p className="text-center text-slate-400 text-xs mt-8">StudySnap v1.1 • Motor OCR Local</p>
+      <p className="text-center text-slate-400 text-xs mt-8">StudySnap v1.2 • Gemini Powered</p>
     </div>
   );
 };
@@ -341,8 +386,13 @@ const HomePage = ({ user }: { user: User }) => {
     if(confirm("¿Cerrar sesión?")) signOut(auth);
   }
 
+  // Floating Action Button for creating new test
+  const handleCreate = () => {
+    navigate('/editor?mode=camera');
+  }
+
   return (
-    <div className="space-y-8 pb-24 md:pb-8 w-full animate-in fade-in zoom-in-95 duration-300">
+    <div className="space-y-8 pb-24 md:pb-8 w-full animate-in fade-in zoom-in-95 duration-300 relative min-h-screen">
       <header className="flex justify-between items-center bg-white/80 dark:bg-slate-800/80 backdrop-blur-md p-6 rounded-2xl shadow-sm border border-white/50 dark:border-slate-700">
         <div className="flex items-center gap-4">
           <div className="bg-brand-100 dark:bg-slate-700 p-3 rounded-full border border-brand-200 dark:border-slate-600 shadow-sm">
@@ -423,11 +473,16 @@ const HomePage = ({ user }: { user: User }) => {
           ))}
         </div>
       )}
+      
+      {/* Floating Action Button */}
+      <div className="fixed bottom-6 right-6 z-10">
+        <Button onClick={handleCreate} className="rounded-full w-14 h-14 flex items-center justify-center shadow-lg shadow-brand-500/40">
+           <Plus size={28} />
+        </Button>
+      </div>
     </div>
   );
 };
-
-// ... EditorPage, QuizPage (sin cambios mayores, se adaptan por CSS) ...
 
 const EditorPage = ({ user }: { user: User }) => {
   const navigate = useNavigate();
@@ -695,7 +750,7 @@ const EditorPage = ({ user }: { user: User }) => {
               </div>
               <h3 className="font-bold text-xl text-slate-800 dark:text-white mb-2">Modo Escáner Activo</h3>
               <p className="text-slate-600 dark:text-slate-300 mb-6 max-w-xs mx-auto">
-                 Haz fotos a tu libro o sube un PDF. El sistema extraerá las preguntas automáticamente sin usar Internet.
+                 Haz fotos a tu libro o sube un PDF. El sistema extraerá las preguntas automáticamente.
               </p>
               <Button onClick={() => document.getElementById('file-upload-trigger')?.click()} className="w-full sm:w-auto px-8 py-3 text-lg flex items-center justify-center gap-2 shadow-lg shadow-brand-500/20">
                  <Upload size={20} /> Abrir Cámara / Archivo
@@ -792,353 +847,137 @@ const EditorPage = ({ user }: { user: User }) => {
 const QuizPage = ({ user }: { user: User }) => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [test, setTest] = useState<Test | undefined>(undefined);
-  const [questions, setQuestions] = useState<Question[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
-  const [isAnswerChecked, setIsAnswerChecked] = useState(false);
-  const [score, setScore] = useState(0);
-  const [answers, setAnswers] = useState<AnswerDetail[]>([]);
+  const [test, setTest] = useState<Test | null>(null);
   const [loading, setLoading] = useState(true);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
+  const [answers, setAnswers] = useState<AnswerDetail[]>([]);
+  const [showResult, setShowResult] = useState(false);
 
   useEffect(() => {
     const loadTest = async () => {
-      setLoading(true);
-      const loadedTest = await storageService.getTestById(id || '');
-      if (loadedTest) {
-        setTest(loadedTest);
-        const shuffled = [...loadedTest.questions].sort(() => Math.random() - 0.5);
-        const fullyShuffled = shuffled.map(q => ({ ...q, options: [...q.options].sort(() => Math.random() - 0.5) }));
-        setQuestions(fullyShuffled);
+      if (!id) return;
+      const t = await storageService.getTestById(id);
+      if (t) {
+        setTest(t);
       }
       setLoading(false);
     };
     loadTest();
   }, [id]);
 
-  const handleOptionSelect = (optId: string) => {
-    if (isAnswerChecked) return;
-    setSelectedOptionId(optId);
-    setIsAnswerChecked(true);
-    const currentQ = questions[currentIndex];
-    const isCorrect = optId === currentQ.correctOptionId;
-    if (isCorrect) setScore(prev => prev + 1);
-    setAnswers(prev => [...prev, {
-      questionId: currentQ.id, questionText: currentQ.text, selectedOptionId: optId, correctOptionId: currentQ.correctOptionId, options: currentQ.options, isCorrect
-    }]);
+  const handleAnswer = (optionId: string) => {
+    setSelectedOptionId(optionId);
   };
 
-  const handleNext = () => {
-    if (currentIndex < questions.length - 1) {
-      setCurrentIndex(prev => prev + 1);
-      setSelectedOptionId(null);
-      setIsAnswerChecked(false);
+  const nextQuestion = async () => {
+    if (!test || !selectedOptionId) return;
+
+    const currentQuestion = test.questions[currentQuestionIndex];
+    const isCorrect = selectedOptionId === currentQuestion.correctOptionId;
+
+    const answerDetail: AnswerDetail = {
+      questionId: currentQuestion.id,
+      questionText: currentQuestion.text,
+      selectedOptionId: selectedOptionId,
+      correctOptionId: currentQuestion.correctOptionId,
+      options: currentQuestion.options,
+      isCorrect
+    };
+
+    const newAnswers = [...answers, answerDetail];
+    setAnswers(newAnswers);
+    setSelectedOptionId(null);
+
+    if (currentQuestionIndex < test.questions.length - 1) {
+      setCurrentQuestionIndex(prev => prev + 1);
     } else {
-      finishQuiz();
-    }
-  };
-
-  const finishQuiz = async () => {
-    if (!test) return;
-    const result: TestResult = { id: generateId(), userId: user.uid, testId: test.id, testTitle: test.title, date: Date.now(), score: score, totalQuestions: answers.length, details: answers };
-    await storageService.saveResult(result);
-    navigate(`/history/${result.id}`, { replace: true });
-  };
-
-  if (loading) return <div className="flex justify-center h-screen items-center bg-slate-50 dark:bg-slate-900"><Loader2 className="animate-spin text-brand-500" /></div>;
-  if (!test) return <div>No se encontró el test.</div>;
-  if (questions.length === 0) return <div>Este test no tiene preguntas.</div>;
-
-  const currentQ = questions[currentIndex];
-  const labels = ['A', 'B', 'C', 'D', 'E', 'F']; 
-
-  return (
-    <div className="flex flex-col h-[calc(100vh-4rem)] max-w-2xl mx-auto w-full">
-      <header className="flex justify-between items-center mb-6 pt-4">
-        <button onClick={() => navigate('/')} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"><XCircle size={28} /></button>
-        <div className="bg-white dark:bg-slate-800 px-4 py-1 rounded-full border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-600 dark:text-slate-300 shadow-sm">
-          {currentIndex + 1} / {questions.length}
-        </div>
-        <button onClick={finishQuiz} className="text-brand-600 dark:text-brand-400 font-bold text-sm hover:underline">Terminar</button>
-      </header>
-
-      <div className="flex-1 overflow-y-auto scrollbar-hide p-1">
-        <Card className="mb-6 border-l-4 border-l-brand-500 shadow-lg bg-white dark:bg-slate-800 dark:border-none">
-           <h2 className="text-xl md:text-2xl font-bold text-slate-800 dark:text-white leading-relaxed">{currentQ.text}</h2>
-        </Card>
-        <div className="space-y-3">
-          {currentQ.options.map((opt, index) => {
-            let stateStyle = "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-300";
-            let icon = <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 font-bold flex items-center justify-center text-sm">{labels[index]}</div>;
-
-            if (isAnswerChecked) {
-              if (opt.id === currentQ.correctOptionId) {
-                 stateStyle = "border-green-500 bg-green-50 dark:bg-green-900/20 ring-1 ring-green-500";
-                 icon = <div className="w-8 h-8 rounded-full bg-green-500 text-white flex items-center justify-center"><CheckCircle size={18}/></div>;
-              } else if (opt.id === selectedOptionId) {
-                 stateStyle = "border-red-500 bg-red-50 dark:bg-red-900/20 ring-1 ring-red-500";
-                 icon = <div className="w-8 h-8 rounded-full bg-red-500 text-white flex items-center justify-center"><XCircle size={18}/></div>;
-              } else {
-                 stateStyle = "opacity-60 border-slate-100 dark:border-slate-700 grayscale";
-              }
-            } else if (selectedOptionId === opt.id) {
-               stateStyle = "border-brand-500 bg-brand-50 dark:bg-brand-900/20";
-            }
-            return (
-              <div key={opt.id} onClick={() => handleOptionSelect(opt.id)} className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex items-center gap-4 shadow-sm ${stateStyle}`}>
-                {icon} <span className="font-medium text-slate-700 dark:text-slate-200 text-lg">{opt.text}</span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-      <div className="mt-6 pt-4 border-t border-slate-200/50 dark:border-slate-700">
-        {isAnswerChecked ? (
-           <Button onClick={handleNext} className="w-full py-4 text-xl shadow-xl shadow-brand-500/20 dark:shadow-none rounded-2xl animate-in slide-in-from-bottom-2">
-             {currentIndex === questions.length - 1 ? 'Ver Resultados' : 'Siguiente Pregunta'}
-           </Button>
-        ) : ( <div className="text-center text-slate-400 text-sm font-medium animate-pulse">Selecciona tu respuesta...</div> )}
-      </div>
-    </div>
-  );
-};
-
-const HistoryPage = ({ user }: { user: User }) => {
-  const [results, setResults] = useState<TestResult[]>([]);
-  const [loading, setLoading] = useState(true);
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    const loadResults = async () => {
-      const data = await storageService.getResults(user.uid);
-      setResults(data);
-      setLoading(false);
-    };
-    loadResults();
-  }, [user]);
-
-  const handleDeleteAll = async () => {
-    if (confirm("¿Estás seguro de querer borrar todo el historial?")) {
-       await storageService.deleteAllResults(user.uid);
-       setResults([]);
-    }
-  };
-
-  if (loading) return <div className="flex justify-center py-20"><Loader2 className="animate-spin text-brand-500" /></div>;
-
-  return (
-    <div className="pb-24 md:pb-8 max-w-2xl mx-auto animate-in fade-in zoom-in-95 duration-300">
-      <header className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Historial</h1>
-        {results.length > 0 && <button onClick={handleDeleteAll} className="text-red-500 text-sm hover:underline">Borrar todo</button>}
-      </header>
-      {results.length === 0 ? (
-        <div className="text-center py-20 text-slate-400">
-           <HistoryIcon size={48} className="mx-auto mb-4 opacity-50"/>
-           <p>No hay resultados recientes.</p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-           {results.map(r => (
-             <div key={r.id} onClick={() => navigate(`/history/${r.id}`)} className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-100 dark:border-slate-700 flex justify-between items-center cursor-pointer hover:shadow-md transition-all">
-                <div>
-                   <h3 className="font-bold text-slate-700 dark:text-slate-200">{r.testTitle}</h3>
-                   <p className="text-xs text-slate-500 dark:text-slate-400">{new Date(r.date).toLocaleDateString()} • {new Date(r.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
-                </div>
-                <div className="text-right">
-                   <div className={`text-xl font-bold ${r.score === r.totalQuestions ? 'text-green-500' : 'text-brand-600 dark:text-brand-400'}`}>
-                     {Math.round((r.score / r.totalQuestions) * 100)}%
-                   </div>
-                   <div className="text-xs text-slate-400">{r.score}/{r.totalQuestions}</div>
-                </div>
-             </div>
-           ))}
-        </div>
-      )}
-    </div>
-  );
-};
-
-const ResultViewPage = ({ user }: { user: User }) => {
-  const { id } = useParams();
-  const navigate = useNavigate();
-  const [result, setResult] = useState<TestResult | undefined>(undefined);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const load = async () => {
-      if (id) {
-        const data = await storageService.getResultById(id);
-        setResult(data);
-      }
-      setLoading(false);
-    };
-    load();
-  }, [id]);
-
-  if (loading) return <div className="flex justify-center py-20"><Loader2 className="animate-spin text-brand-500" /></div>;
-  if (!result) return <div>Resultado no encontrado.</div>;
-  const percentage = Math.round((result.score / result.totalQuestions) * 100);
-
-  return (
-    <div className="pb-24 md:pb-8 max-w-2xl mx-auto">
-      <header className="flex items-center gap-2 mb-6">
-        <button onClick={() => navigate('/history')} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-slate-600 dark:text-slate-300"><ArrowLeft /></button>
-        <h1 className="text-xl font-bold text-slate-800 dark:text-white truncate flex-1">{result.testTitle}</h1>
-      </header>
+      // Finish
+      const score = newAnswers.filter(a => a.isCorrect).length;
+      const result: TestResult = {
+        id: generateId(),
+        userId: user.uid,
+        testId: test.id,
+        testTitle: test.title,
+        date: Date.now(),
+        score: Math.round((score / test.questions.length) * 10),
+        totalQuestions: test.questions.length,
+        details: newAnswers
+      };
       
-      <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 mb-6 text-center shadow-sm border border-slate-100 dark:border-slate-700">
-         <div className="text-sm text-slate-500 uppercase font-bold tracking-wider mb-2">Puntuación Final</div>
-         <div className={`text-5xl font-black mb-2 ${percentage >= 80 ? 'text-green-500' : percentage >= 50 ? 'text-brand-600' : 'text-red-500'}`}>
-            {percentage}%
-         </div>
-         <div className="text-slate-400 text-sm">
-           Has acertado {result.score} de {result.totalQuestions} preguntas
-         </div>
-      </div>
+      await storageService.saveResult(result);
+      setShowResult(true);
+    }
+  };
 
-      <div className="space-y-6">
-        {result.details.map((detail, idx) => (
-          <div key={idx} className="bg-white dark:bg-slate-800 rounded-xl p-4 border border-slate-100 dark:border-slate-700">
-             <div className="flex gap-3 mb-3">
-               <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white ${detail.isCorrect ? 'bg-green-500' : 'bg-red-500'}`}>
-                 {detail.isCorrect ? <CheckCircle size={14} /> : <XCircle size={14} />}
-               </div>
-               <p className="font-medium text-slate-800 dark:text-slate-200 text-sm leading-relaxed">{detail.questionText}</p>
-             </div>
-             
-             <div className="pl-9 space-y-2">
-                {detail.options.map(opt => {
-                  const isSelected = opt.id === detail.selectedOptionId;
-                  const isCorrect = opt.id === detail.correctOptionId;
-                  let style = "border-slate-100 dark:border-slate-700 opacity-50";
-                  if (isCorrect) style = "border-green-200 bg-green-50 text-green-800 dark:bg-green-900/20 dark:text-green-300 dark:border-green-800 opacity-100";
-                  else if (isSelected && !isCorrect) style = "border-red-200 bg-red-50 text-red-800 dark:bg-red-900/20 dark:text-red-300 dark:border-red-800 opacity-100";
-                  return (
-                    <div key={opt.id} className={`text-sm p-2 rounded-lg border ${style}`}>
-                       {opt.text}
-                       {isCorrect && <span className="ml-2 font-bold text-xs">✓ Correcta</span>}
-                       {isSelected && !isCorrect && <span className="ml-2 font-bold text-xs">✗ Tu respuesta</span>}
-                    </div>
-                  );
-                })}
-             </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
+  if (loading) return <div className="flex justify-center pt-20"><Loader2 className="animate-spin text-brand-500" /></div>;
+  if (!test) return <div className="text-center pt-20">Test no encontrado</div>;
 
-// --- Layout & Router ---
-
-const FabMenu = ({ onAction }: { onAction: (action: 'manual' | 'camera') => void }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const btnCommon = "absolute left-1/2 -translate-x-1/2 w-12 h-12 rounded-full shadow-lg flex items-center justify-center border border-slate-200 dark:border-slate-600 transition-all duration-300 ease-out z-[60]";
-  
-  return (
-    <div className="relative -top-6 h-16 w-16 flex justify-center items-center">
-       <button onClick={() => { setIsOpen(false); onAction('manual'); }} className={`${btnCommon} ${isOpen ? '-translate-y-[90px] opacity-100' : 'translate-y-0 opacity-0 pointer-events-none'} bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-slate-600`}>
-         <PenTool size={20} /> <span className={`absolute top-full mt-1 bg-white/80 dark:bg-slate-800/80 backdrop-blur px-2 rounded text-[10px] font-bold text-slate-600 dark:text-slate-300 transition-opacity duration-300 ${isOpen ? 'opacity-100' : 'opacity-0'}`}>Manual</span>
-       </button>
-       <button onClick={() => { setIsOpen(false); onAction('camera'); }} className={`${btnCommon} ${isOpen ? '-translate-y-[180px] opacity-100' : 'translate-y-0 opacity-0 pointer-events-none'} bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-slate-600`}>
-         <Camera size={20} /> <span className={`absolute top-full mt-1 bg-white/80 dark:bg-slate-800/80 backdrop-blur px-2 rounded text-[10px] font-bold text-slate-600 dark:text-slate-300 transition-opacity duration-300 ${isOpen ? 'opacity-100' : 'opacity-0'}`}>Escanear</span>
-       </button>
-       <button onClick={() => setIsOpen(!isOpen)} className={`relative z-[60] w-16 h-16 rounded-full shadow-xl flex items-center justify-center transition-all duration-300 ${isOpen ? 'bg-slate-800 dark:bg-slate-600 rotate-45 scale-90' : 'bg-brand-600 hover:scale-105 hover:bg-brand-700'} text-white`}> <Plus size={32} /> </button>
-       {isOpen && <div className="fixed inset-0 z-[50] bg-black/10 backdrop-blur-[1px]" onClick={() => setIsOpen(false)}></div>}
-    </div>
-  );
-};
-
-const SidebarItem = ({ icon, label, active, onClick }: any) => (
-  <button onClick={onClick} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium ${active ? 'bg-brand-50 text-brand-600 dark:bg-slate-800 dark:text-brand-400 shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900 dark:hover:bg-slate-800 dark:text-slate-400'}`}>
-    {icon} <span>{label}</span>
-  </button>
-);
-
-const DesktopSidebar = ({ user, onAction }: { user: User, onAction: (a: 'manual'|'camera') => void }) => {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const isActive = (path: string) => location.pathname === path || (path !== '/' && location.pathname.startsWith(path));
-
-  return (
-    <aside className="hidden md:flex flex-col w-72 h-screen fixed left-0 top-0 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 p-6 z-50">
-      <div className="flex items-center gap-3 mb-10 px-2">
-         <div className="bg-gradient-to-tr from-brand-600 to-indigo-500 p-2.5 rounded-xl text-white shadow-lg shadow-brand-500/30">
-            <FileText size={24} />
-         </div>
-         <h1 className="font-bold text-2xl text-slate-800 dark:text-white tracking-tight">StudySnap</h1>
-      </div>
-
-      <Button onClick={() => onAction('camera')} className="w-full mb-8 flex items-center justify-center gap-2 shadow-lg shadow-brand-500/20 py-4 text-base font-bold bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-700 hover:to-indigo-700 transition-all transform hover:scale-[1.02]">
-         <Plus size={20} /> Nuevo Test
-      </Button>
-
-      <nav className="space-y-2 flex-1">
-         <SidebarItem icon={<HomeIcon size={20} />} label="Inicio" active={location.pathname === '/'} onClick={() => navigate('/')} />
-         <SidebarItem icon={<HistoryIcon size={20} />} label="Historial" active={location.pathname.startsWith('/history')} onClick={() => navigate('/history')} />
-         <SidebarItem icon={<Settings size={20} />} label="Configuración" active={location.pathname === '/settings'} onClick={() => navigate('/settings')} />
-      </nav>
-
-      <div className="pt-6 border-t border-slate-100 dark:border-slate-800 mt-auto">
-         <div className="flex items-center gap-3 px-2 mb-4 bg-slate-50 dark:bg-slate-800 p-3 rounded-xl">
-            <div className="w-10 h-10 rounded-full bg-brand-100 dark:bg-slate-700 flex items-center justify-center text-brand-600 dark:text-brand-400 font-bold border border-brand-200 dark:border-slate-600">
-               {user.displayName?.charAt(0) || 'U'}
+  if (showResult) {
+    const score = answers.filter(a => a.isCorrect).length;
+    return (
+      <div className="max-w-2xl mx-auto p-6 pb-24">
+        <div className="bg-white dark:bg-slate-800 rounded-3xl p-8 text-center shadow-sm border border-slate-100 dark:border-slate-700 mb-6">
+           <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">Resultados</h2>
+           <div className="text-5xl font-black text-brand-600 dark:text-brand-400 mb-2">{score} / {test.questions.length}</div>
+           <p className="text-slate-500 dark:text-slate-400 mb-6">Puntuación: {Math.round((score / test.questions.length) * 10)}/10</p>
+           <Button onClick={() => navigate('/')} className="w-full">Volver al Inicio</Button>
+        </div>
+        <div className="space-y-4">
+          {answers.map((ans, idx) => (
+            <div key={idx} className={`bg-white dark:bg-slate-800 p-4 rounded-xl border ${ans.isCorrect ? 'border-green-200 dark:border-green-900' : 'border-red-200 dark:border-red-900'}`}>
+               <p className="font-medium text-slate-800 dark:text-white mb-2">{idx + 1}. {ans.questionText}</p>
+               {ans.options.map(opt => {
+                 const isSelected = opt.id === ans.selectedOptionId;
+                 const isCorrect = opt.id === ans.correctOptionId;
+                 let bg = "bg-slate-50 dark:bg-slate-900";
+                 if (isCorrect) bg = "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300";
+                 else if (isSelected) bg = "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300";
+                 
+                 return (
+                   <div key={opt.id} className={`p-2 rounded mb-1 text-sm ${bg} flex justify-between`}>
+                     <span>{opt.text}</span>
+                     {isCorrect && <CheckCircle size={14}/>}
+                     {isSelected && !isCorrect && <XCircle size={14}/>}
+                   </div>
+                 )
+               })}
             </div>
-            <div className="overflow-hidden">
-               <p className="text-sm font-bold text-slate-700 dark:text-slate-200 truncate">{user.displayName}</p>
-               <p className="text-xs text-slate-400 truncate">{user.email}</p>
-            </div>
-         </div>
-         <button onClick={() => signOut(auth)} className="flex items-center gap-2 text-slate-500 hover:text-red-500 text-sm px-4 py-2 w-full rounded-lg hover:bg-red-50 dark:hover:bg-slate-800 transition-colors font-medium">
-            <LogOut size={18} /> Cerrar Sesión
-         </button>
+          ))}
+        </div>
       </div>
-    </aside>
-  );
-}
-
-const Layout = ({ children, user }: { children?: React.ReactNode, user: User }) => {
-  const location = useLocation();
-  const navigate = useNavigate();
-  
-  if (location.pathname.startsWith('/quiz/')) {
-    // Modo Quiz inmersivo (pantalla completa)
-    return <div className="max-w-5xl mx-auto min-h-screen p-4 md:p-8 animate-in zoom-in-95 duration-300">{children}</div>;
+    );
   }
 
-  return (
-    <div className="w-full min-h-screen flex bg-slate-50/50 dark:bg-slate-900/50">
-      {/* Sidebar para PC (>= md) */}
-      <DesktopSidebar user={user} onAction={(action) => navigate(`/editor?mode=${action}`)} />
+  const question = test.questions[currentQuestionIndex];
 
-      <div className="flex-1 flex flex-col md:pl-72 transition-all duration-300">
-        <main className="flex-1 p-4 md:p-8 w-full max-w-7xl mx-auto">
-          {children}
-        </main>
-        
-        {/* Barra Inferior para Móvil (< md) */}
-        <nav className="md:hidden bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 fixed bottom-0 left-0 right-0 z-40 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] pb-safe">
-          <div className="max-w-md mx-auto flex justify-around items-center h-16 px-4 relative z-50">
-            <button 
-              onClick={() => navigate('/')} 
-              className={`flex flex-col items-center p-2 rounded-xl transition-colors w-16 ${location.pathname === '/' ? 'text-brand-600 bg-brand-50 dark:bg-slate-800 dark:text-brand-400' : 'text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300'}`}
+  return (
+    <div className="max-w-xl mx-auto p-4 flex flex-col h-[calc(100vh-80px)]">
+      <header className="flex justify-between items-center mb-6">
+        <button onClick={() => navigate('/')} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full"><X size={24} className="text-slate-400"/></button>
+        <span className="font-bold text-slate-700 dark:text-slate-300">Pregunta {currentQuestionIndex + 1}/{test.questions.length}</span>
+        <div className="w-10"></div>
+      </header>
+
+      <div className="flex-1 overflow-y-auto">
+        <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-6 leading-relaxed">{question.text}</h2>
+        <div className="space-y-3">
+          {question.options.map(opt => (
+            <button
+              key={opt.id}
+              onClick={() => handleAnswer(opt.id)}
+              className={`w-full p-4 rounded-xl border-2 text-left transition-all ${selectedOptionId === opt.id ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20 dark:border-brand-500' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-brand-200 dark:hover:border-slate-600'}`}
             >
-              <HomeIcon size={24} />
-              <span className="text-[10px] font-bold mt-1">Inicio</span>
+              <span className="text-slate-800 dark:text-slate-200">{opt.text}</span>
             </button>
-            
-            <FabMenu onAction={(action) => navigate(`/editor?mode=${action}`)} />
-            
-            <button 
-              onClick={() => navigate('/history')} 
-              className={`flex flex-col items-center p-2 rounded-xl transition-colors w-16 ${location.pathname.startsWith('/history') ? 'text-brand-600 bg-brand-50 dark:bg-slate-800 dark:text-brand-400' : 'text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300'}`}
-            >
-              <HistoryIcon size={24} />
-              <span className="text-[10px] font-bold mt-1">Historial</span>
-            </button>
-          </div>
-        </nav>
+          ))}
+        </div>
+      </div>
+
+      <div className="pt-4 mt-auto">
+        <Button onClick={nextQuestion} disabled={!selectedOptionId} className="w-full py-3 text-lg shadow-lg shadow-brand-200 dark:shadow-none">
+          {currentQuestionIndex === test.questions.length - 1 ? 'Terminar' : 'Siguiente'}
+        </Button>
       </div>
     </div>
   );
@@ -1146,31 +985,25 @@ const Layout = ({ children, user }: { children?: React.ReactNode, user: User }) 
 
 const App = () => {
   const { user, loading } = useAuth();
-  const { isDark } = useDarkMode(); 
+  const { isDark } = useDarkMode();
 
-  if (loading) {
-     return <div className="h-screen flex items-center justify-center bg-brand-50 dark:bg-slate-900"><Loader2 className="animate-spin text-brand-500" size={32}/></div>;
-  }
-
-  if (!user) {
-    return <LoginPage />;
-  }
+  if (loading) return <div className="h-screen w-screen flex items-center justify-center bg-white dark:bg-slate-900"><Loader2 className="animate-spin text-brand-600" size={40} /></div>;
 
   return (
-    <HashRouter>
-      <Layout user={user}>
+    <div className={`min-h-screen transition-colors duration-300 ${isDark ? 'dark bg-slate-900' : 'bg-slate-50'}`}>
+      <HashRouter>
         <Routes>
-          <Route path="/" element={<HomePage user={user} />} />
-          <Route path="/editor" element={<EditorPage user={user} />} />
-          <Route path="/editor/:id" element={<EditorPage user={user} />} />
-          <Route path="/quiz/:id" element={<QuizPage user={user} />} />
-          <Route path="/history" element={<HistoryPage user={user} />} />
-          <Route path="/history/:id" element={<ResultViewPage user={user} />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route path="/share/:id" element={<SharePage user={user} />} />
+          <Route path="/login" element={!user ? <LoginPage /> : <Navigate to="/" />} />
+          <Route path="/share/:id" element={user ? <SharePage user={user} /> : <LoginPage />} />
+          <Route path="/" element={user ? <HomePage user={user} /> : <Navigate to="/login" />} />
+          <Route path="/editor" element={user ? <EditorPage user={user} /> : <Navigate to="/login" />} />
+          <Route path="/editor/:id" element={user ? <EditorPage user={user} /> : <Navigate to="/login" />} />
+          <Route path="/quiz/:id" element={user ? <QuizPage user={user} /> : <Navigate to="/login" />} />
+          <Route path="/settings" element={user ? <SettingsPage /> : <Navigate to="/login" />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
-      </Layout>
-    </HashRouter>
+      </HashRouter>
+    </div>
   );
 };
 
