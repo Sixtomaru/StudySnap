@@ -39,19 +39,20 @@ import {
   RefreshCw,
   AlertTriangle,
   BookOpen,
-  FileUp
+  FileUp,
+  Trophy,
+  Calendar
 } from 'lucide-react';
 import { signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { auth, googleProvider } from './services/firebaseConfig';
 import { Button, Card, Input, TextArea, Badge, Toast } from './components/UI';
-import { Layout } from './components/Layout'; // Nuevo componente
+import { Layout } from './components/Layout'; 
 import { storageService } from './services/storageService';
 import { parseFileToQuiz, getPDFPageCount, processPDFBatch } from './services/geminiService';
 import { Test, Question, Option, TestResult, AnswerDetail, PDFProgress } from './types';
 
 // --- Utils ---
 const generateId = () => Math.random().toString(36).substring(2, 9);
-// Hook para detectar si es móvil (para el icono de cámara vs upload)
 const useIsMobile = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   useEffect(() => {
@@ -76,14 +77,10 @@ const useAuth = () => {
   return { user, loading };
 };
 
-// --- Dark Mode Context (Arreglado) ---
-// Se exporta el contexto para usarlo, o se usa un hook global.
-// Para simplificar sin crear más archivos, lo manejamos aquí.
+// --- Dark Mode Context ---
 const useDarkMode = () => {
   const [isDark, setIsDark] = useState(() => {
-    // Verificar preferencia guardada o del sistema
-    if (localStorage.getItem('theme') === 'dark') return true;
-    return false;
+    return localStorage.getItem('theme') === 'dark';
   });
 
   useEffect(() => {
@@ -102,7 +99,6 @@ const useDarkMode = () => {
 
 // --- Components ---
 
-// Modal Selección Lista
 const ListSelectionModal = ({ user, onSelect, onCancel }: { user: User, onSelect: (testId: string | null, title?: string) => void, onCancel: () => void }) => {
   const [tests, setTests] = useState<Test[]>([]);
   const [loading, setLoading] = useState(true);
@@ -189,11 +185,78 @@ const SettingsPage = () => {
       
       <div className="text-center p-4">
           <Button variant="danger" onClick={() => signOut(auth)} className="w-full md:w-auto">Cerrar Sesión</Button>
-          <p className="text-center text-slate-400 text-xs mt-8">StudySnap v1.6 • Gemini Powered</p>
+          <p className="text-center text-slate-400 text-xs mt-8">StudySnap v1.7 • Gemini Powered</p>
       </div>
     </div>
   );
 };
+
+const HistoryPage = ({ user }: { user: User }) => {
+    const [results, setResults] = useState<TestResult[]>([]);
+    const [loading, setLoading] = useState(true);
+    const navigate = useNavigate();
+
+    useEffect(() => {
+        const load = async () => {
+            const data = await storageService.getResults(user.uid);
+            setResults(data);
+            setLoading(false);
+        };
+        load();
+    }, [user]);
+
+    const handleDelete = async (e: React.MouseEvent, id: string) => {
+        e.stopPropagation();
+        if(confirm("¿Borrar este resultado?")) {
+            await storageService.deleteResult(id);
+            setResults(prev => prev.filter(r => r.id !== id));
+        }
+    }
+
+    if (loading) return <div className="flex justify-center pt-20"><Loader2 className="animate-spin text-brand-500" size={40}/></div>;
+
+    return (
+        <div className="animate-in fade-in zoom-in-95 duration-300">
+             <header className="flex items-center gap-2 mb-6">
+                <button onClick={() => navigate('/')} className="md:hidden p-2 hover:bg-white/50 rounded-full text-slate-700 dark:text-slate-300"><ArrowLeft /></button>
+                <h1 className="font-bold text-3xl text-slate-800 dark:text-white">Mis Resultados</h1>
+             </header>
+
+             {results.length === 0 ? (
+                 <div className="text-center py-20 text-slate-400">
+                     <Trophy size={48} className="mx-auto mb-4 opacity-50"/>
+                     <p>Aún no has completado ningún test.</p>
+                 </div>
+             ) : (
+                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                     {results.map(res => (
+                         <div key={res.id} className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col gap-3">
+                             <div className="flex justify-between items-start">
+                                 <div>
+                                     <h3 className="font-bold text-slate-800 dark:text-white text-lg">{res.testTitle}</h3>
+                                     <p className="text-xs text-slate-500 flex items-center gap-1">
+                                         <Calendar size={12}/> {new Date(res.date).toLocaleDateString()} • {new Date(res.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                     </p>
+                                 </div>
+                                 <div className={`px-3 py-1 rounded-lg font-bold text-sm ${res.score >= 5 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
+                                     {res.score}/10
+                                 </div>
+                             </div>
+                             <div className="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-2 mt-2">
+                                 <div className={`h-2 rounded-full ${res.score >= 5 ? 'bg-green-500' : 'bg-red-500'}`} style={{width: `${res.score * 10}%`}}></div>
+                             </div>
+                             <div className="flex justify-end pt-2">
+                                 <button onClick={(e) => handleDelete(e, res.id)} className="text-slate-400 hover:text-red-500 text-sm flex items-center gap-1 transition-colors">
+                                     <Trash2 size={14}/> Borrar
+                                 </button>
+                             </div>
+                         </div>
+                     ))}
+                 </div>
+             )}
+        </div>
+    );
+}
 
 const HomePage = ({ user }: { user: User }) => {
   const [tests, setTests] = useState<Test[]>([]);
@@ -242,12 +305,22 @@ const HomePage = ({ user }: { user: User }) => {
             <p className="text-slate-500 dark:text-slate-400 text-sm">Hola, {user.displayName?.split(' ')[0]}</p>
           </div>
         </div>
+        <div className="flex gap-2">
+           <button onClick={() => navigate('/settings')} className="p-2 text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 rounded-full bg-white dark:bg-slate-700 shadow-sm"><Settings size={20}/></button>
+           <button onClick={() => signOut(auth)} className="p-2 text-slate-400 hover:text-red-500 rounded-full bg-white dark:bg-slate-700 shadow-sm"><LogOut size={20}/></button>
+        </div>
       </header>
       
       {/* Header Desktop */}
       <div className="hidden md:flex justify-between items-end mb-6">
-         <h2 className="text-3xl font-bold text-slate-800 dark:text-white">Mis Listas</h2>
-         <span className="text-slate-400">{tests.length} listas</span>
+         <div>
+             <h2 className="text-3xl font-bold text-slate-800 dark:text-white">Mis Listas</h2>
+             <span className="text-slate-400">{tests.length} listas</span>
+         </div>
+         <div className="flex gap-2">
+            <Button variant="ghost" onClick={() => navigate('/settings')} className="flex items-center gap-2"><Settings size={18}/> Ajustes</Button>
+            <Button variant="ghost" onClick={() => signOut(auth)} className="flex items-center gap-2 text-red-500 hover:bg-red-50"><LogOut size={18}/> Salir</Button>
+         </div>
       </div>
 
       {loading ? (
@@ -296,7 +369,7 @@ const HomePage = ({ user }: { user: User }) => {
   );
 };
 
-// --- EDITOR PAGE (Redesigned) ---
+// --- EDITOR PAGE (Redesigned & Fixed) ---
 
 interface PDFState {
     base64: string;
@@ -313,11 +386,9 @@ const EditorPage = ({ user }: { user: User }) => {
   const { id: editId } = useParams();
   const isMobile = useIsMobile();
 
-  // State Global del Editor
   const [testId, setTestId] = useState<string | null>(editId || null);
   const [title, setTitle] = useState('');
   const [questions, setQuestions] = useState<Question[]>([]);
-  // 'list' = Vista general de preguntas, 'detail' = Editando una pregunta, 'scanner' = Subida
   const [viewMode, setViewMode] = useState<'list' | 'detail' | 'scanner'>('list'); 
   const [currentQIndex, setCurrentQIndex] = useState(0);
   const [lastEditedIndex, setLastEditedIndex] = useState<number | null>(null);
@@ -327,11 +398,9 @@ const EditorPage = ({ user }: { user: User }) => {
   const [progressPercent, setProgressPercent] = useState(0); 
   const [showListSelector, setShowListSelector] = useState(false);
   
-  // PDF State
   const [pdfState, setPdfState] = useState<PDFState | null>(null);
   const [resumeMetadata, setResumeMetadata] = useState<PDFProgress | null>(null);
 
-  // Inicialización
   useEffect(() => {
     const init = async () => {
       if (editId) {
@@ -343,10 +412,9 @@ const EditorPage = ({ user }: { user: User }) => {
           if (test.pdfMetadata && test.pdfMetadata.lastProcessedPage < test.pdfMetadata.totalPages) {
              setResumeMetadata(test.pdfMetadata);
           }
-          // Modo inicial depende del param
           if (modeParam === 'camera') setViewMode('scanner');
-          else if (modeParam === 'manual') setViewMode('detail'); // Si es nuevo manual
-          else setViewMode('list'); // Por defecto lista
+          else if (modeParam === 'manual') setViewMode('detail'); 
+          else setViewMode('list'); 
         } else {
            navigate('/');
         }
@@ -358,13 +426,11 @@ const EditorPage = ({ user }: { user: User }) => {
     init();
   }, [editId, modeParam, user]);
 
-  // --- LOGIC: Guardado y Validación ---
-
   const saveToStorage = async (qs: Question[], t: string, silent = false) => {
       if(!testId && !t) return;
-      const validQs = qs.filter(q => q.text.trim()); // Solo preguntas con texto (aunque estén incompletas)
+      const validQs = qs.filter(q => q.text.trim()); 
       
-      let pdfMeta: PDFProgress | undefined = undefined;
+      let pdfMeta: PDFProgress | null = null; // Important: null instead of undefined for Firestore
       if (pdfState) {
           pdfMeta = { totalPages: pdfState.totalPages, lastProcessedPage: pdfState.lastProcessedPage };
       } else if (resumeMetadata) {
@@ -377,17 +443,23 @@ const EditorPage = ({ user }: { user: User }) => {
         title: t,
         createdAt: Date.now(),
         questions: validQs,
-        pdfMetadata: pdfMeta
+        pdfMetadata: pdfMeta || undefined // Clean undefined if null is issue, but usually null works. Firestore needs null or omission. Undefined throws error.
       };
-      
-      if(!testId) setTestId(test.id); // Set ID if new
-      await storageService.saveTest(test);
-      if(!silent) console.log("Auto-saved");
+      // Firestore strict check: undefined is not allowed. 
+      if(pdfMeta === null) delete test.pdfMetadata;
+      else test.pdfMetadata = pdfMeta;
+
+      if(!testId) setTestId(test.id); 
+      try {
+        await storageService.saveTest(test);
+        if(!silent) console.log("Guardado exitoso");
+      } catch(e) {
+        console.error("Error guardando:", e);
+        if(!silent) alert("Error al guardar en la nube");
+      }
       return test.id;
   };
 
-  // Guardar al cambiar preguntas (Debounce simple o al navegar)
-  // Aquí optamos por guardar al cambiar de vista o acción importante
   const handleAutoSave = () => saveToStorage(questions, title, true);
 
   const validateQuestion = (q: Question) => {
@@ -398,7 +470,6 @@ const EditorPage = ({ user }: { user: User }) => {
   };
 
   const handleExitOrSave = async () => {
-     // Check for invalid questions
      const invalidIndex = questions.findIndex(q => {
          const v = validateQuestion(q);
          return v.hasText && (!v.hasCorrect || v.hasEmptyOption);
@@ -406,9 +477,8 @@ const EditorPage = ({ user }: { user: User }) => {
 
      if(invalidIndex !== -1) {
          const confirmFix = confirm(
-             `La pregunta ${invalidIndex + 1} está incompleta (falta respuesta correcta o texto en opciones).\n\n` +
-             `Las preguntas incompletas NO aparecerán al jugar.\n\n` +
-             `¿Quieres corregirla ahora? (Cancelar para salir y guardar tal cual)`
+             `La pregunta ${invalidIndex + 1} está incompleta.\n\n` +
+             `¿Quieres corregirla ahora? (Cancelar para salir y guardar, se ignorarán las incompletas)`
          );
          if(confirmFix) {
              setCurrentQIndex(invalidIndex);
@@ -461,10 +531,8 @@ const EditorPage = ({ user }: { user: User }) => {
 
         const updatedQuestions = [...questions, ...newQuestions];
         setQuestions(updatedQuestions);
-        // Auto-save after batch load
         await saveToStorage(updatedQuestions, title, true);
-        
-        setViewMode('list'); // Volver a lista tras escanear
+        setViewMode('list'); 
 
       } catch (err: any) {
         alert(err.message);
@@ -477,8 +545,6 @@ const EditorPage = ({ user }: { user: User }) => {
     };
     reader.readAsDataURL(file);
   };
-
-  // --- Navigation Helpers ---
 
   const goToDetail = (index: number) => {
       setCurrentQIndex(index);
@@ -499,10 +565,25 @@ const EditorPage = ({ user }: { user: User }) => {
       }
       setViewMode('detail');
   };
+  
+  const jumpToPage = () => {
+      const p = prompt(`Ir a pregunta (1 - ${questions.length}):`);
+      if(p) {
+          const idx = parseInt(p) - 1;
+          if(!isNaN(idx) && idx >= 0 && idx < questions.length) {
+              setCurrentQIndex(idx);
+          }
+      }
+  }
 
-  // --- RENDER ---
+  const addNewQuestionInDetail = () => {
+      const newQ = { id: generateId(), text: '', options: Array(4).fill(null).map(() => ({ id: generateId(), text: '' })), correctOptionId: '' };
+      const newQs = [...questions, newQ];
+      setQuestions(newQs);
+      setCurrentQIndex(newQs.length - 1);
+  };
 
-  if (isLoading) return <div className="fixed inset-0 z-50 bg-white/90 dark:bg-slate-900/90 flex flex-col items-center justify-center"><Loader2 className="animate-spin text-brand-600 mb-4" size={48}/><p className="text-slate-800 dark:text-white font-bold">{progressMsg}</p><div className="w-64 h-2 bg-slate-200 rounded-full mt-4 overflow-hidden"><div className="h-full bg-brand-600 transition-all duration-300" style={{width: `${progressPercent}%`}}></div></div></div>;
+  if (isLoading) return <div className="fixed inset-0 z-50 bg-white/90 dark:bg-slate-900/90 flex flex-col items-center justify-center"><Loader2 className="animate-spin text-brand-600 mb-4" size={48}/><p className="text-slate-800 dark:text-white font-bold">{progressMsg || "Cargando..."}</p><div className="w-64 h-2 bg-slate-200 rounded-full mt-4 overflow-hidden"><div className="h-full bg-brand-600 transition-all duration-300" style={{width: `${progressPercent}%`}}></div></div></div>;
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 pb-safe">
@@ -513,7 +594,7 @@ const EditorPage = ({ user }: { user: User }) => {
 
       <input id="file-upload" type="file" className="hidden" accept="image/*,application/pdf" onChange={handleFileUpload} />
 
-      {/* --- HEADER COMÚN --- */}
+      {/* --- HEADER EDITOR --- */}
       <header className="sticky top-0 z-20 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-800 px-4 py-3 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-2">
             <button onClick={viewMode === 'list' ? handleExitOrSave : goBackFromDetail} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-slate-600 dark:text-slate-300">
@@ -526,21 +607,19 @@ const EditorPage = ({ user }: { user: User }) => {
         </div>
         
         <div className="flex items-center gap-3">
-             {/* Botón Escanear/Subir (Solo visible en modo lista o scanner) */}
              {viewMode !== 'detail' && (
                  <div className="flex flex-col items-center">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 hidden md:block">{isMobile ? 'Escanear' : 'Subir PDF'}</span>
-                    <Button onClick={() => document.getElementById('file-upload')?.click()} className="w-10 h-10 md:w-auto md:h-10 md:px-4 rounded-xl p-0 flex items-center justify-center bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:text-white shadow-sm">
+                    <Button onClick={() => document.getElementById('file-upload')?.click()} className="w-10 h-10 md:w-auto md:h-10 md:px-4 rounded-xl flex items-center justify-center bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:text-white shadow-sm p-0 md:py-2">
                         {isMobile ? <Camera size={20}/> : <><Upload size={18} className="mr-2"/> Subir PDF</>}
                     </Button>
                  </div>
              )}
 
-             {/* Botón Guardar */}
              <div className="flex flex-col items-center">
                 <span className="text-[10px] font-bold text-brand-600 dark:text-brand-400 uppercase tracking-wider mb-1">Guardar</span>
-                <Button onClick={handleExitOrSave} className="w-10 h-10 rounded-xl p-0 flex items-center justify-center bg-brand-600 hover:bg-brand-700 text-white shadow-lg shadow-brand-500/30">
-                    <Save size={20}/>
+                <Button onClick={handleExitOrSave} className="w-10 h-10 rounded-xl flex items-center justify-center bg-brand-600 hover:bg-brand-700 text-white shadow-lg shadow-brand-500/30 p-0">
+                    <Save size={20} className="text-white"/>
                 </Button>
              </div>
         </div>
@@ -548,10 +627,8 @@ const EditorPage = ({ user }: { user: User }) => {
 
       <div className="max-w-4xl mx-auto p-4">
         
-        {/* --- VISTA: LISTA DE PREGUNTAS --- */}
         {viewMode === 'list' && (
             <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                {/* PDF STATUS CARD */}
                 {(pdfState || resumeMetadata) && (
                     <div className="bg-blue-50 dark:bg-slate-800 border border-blue-100 dark:border-slate-700 p-4 rounded-xl flex items-center justify-between shadow-sm">
                         <div className="flex items-center gap-3">
@@ -567,7 +644,6 @@ const EditorPage = ({ user }: { user: User }) => {
                     </div>
                 )}
 
-                {/* ADD BUTTONS */}
                 <div className="grid grid-cols-2 gap-3 mb-6">
                     <button onClick={() => { setCurrentQIndex(questions.length); setViewMode('detail'); }} className="p-4 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-600 text-slate-500 hover:border-brand-500 hover:text-brand-500 hover:bg-brand-50 dark:hover:bg-slate-800 transition-all flex flex-col items-center gap-2">
                         <Plus size={24}/> <span className="font-medium">Añadir Manual</span>
@@ -577,7 +653,6 @@ const EditorPage = ({ user }: { user: User }) => {
                     </button>
                 </div>
 
-                {/* QUESTIONS LIST */}
                 <div className="space-y-2">
                     {questions.map((q, idx) => {
                         const validation = validateQuestion(q);
@@ -602,25 +677,25 @@ const EditorPage = ({ user }: { user: User }) => {
             </div>
         )}
 
-        {/* --- VISTA: DETALLE (EDITOR REAL) --- */}
         {viewMode === 'detail' && (
             <div className="animate-in fade-in slide-in-from-right-4 duration-300 h-full">
-                {/* NAVIGATION BAR */}
                 <div className="flex justify-between items-center mb-4 bg-white dark:bg-slate-800 p-2 rounded-xl border border-slate-100 dark:border-slate-700 shadow-sm">
                     <div className="flex gap-1">
                         <Button variant="ghost" onClick={() => setCurrentQIndex(0)} disabled={currentQIndex === 0}><ChevronsLeft size={20}/></Button>
                         <Button variant="ghost" onClick={() => setCurrentQIndex(prev => Math.max(0, prev - 1))} disabled={currentQIndex === 0}><ChevronLeft size={20}/></Button>
                     </div>
                     
-                    <span className="font-mono font-bold text-slate-600 dark:text-slate-300">{currentQIndex + 1} / {questions.length > currentQIndex ? questions.length : currentQIndex + 1}</span>
+                    <button onClick={jumpToPage} className="font-mono font-bold text-brand-600 dark:text-brand-400 bg-brand-50 dark:bg-brand-900/30 px-3 py-1 rounded hover:bg-brand-100 transition-colors">
+                        {currentQIndex + 1} / {questions.length > currentQIndex ? questions.length : currentQIndex + 1}
+                    </button>
                     
                     <div className="flex gap-1">
                         <Button variant="ghost" onClick={() => setCurrentQIndex(prev => prev + 1)} disabled={currentQIndex >= questions.length}><ChevronRight size={20}/></Button>
-                        <Button variant="ghost" onClick={goToLastEdited} title="Ir a última editada" className="text-brand-600"><ChevronsRight size={20}/></Button>
+                        <Button variant="ghost" onClick={goToLastEdited} title="Última editada"><ChevronsRight size={20}/></Button>
+                        <Button variant="secondary" onClick={addNewQuestionInDetail} title="Nueva pregunta" className="ml-1"><Plus size={18}/></Button>
                     </div>
                 </div>
 
-                {/* EDIT CARD */}
                 <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-md border border-slate-100 dark:border-slate-700 p-6 relative">
                     <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Pregunta</label>
                     <TextArea 
@@ -700,13 +775,16 @@ const EditorPage = ({ user }: { user: User }) => {
   );
 };
 
-// --- QUIZ PAGE (Refactored to filter invalid questions) ---
+// --- QUIZ PAGE (Refactored for Immediate Feedback) ---
 const QuizPage = ({ user }: { user: User }) => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [test, setTest] = useState<Test | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  
+  // Quiz State
+  const [answered, setAnswered] = useState(false);
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
   const [answers, setAnswers] = useState<AnswerDetail[]>([]);
   const [showResult, setShowResult] = useState(false);
@@ -716,7 +794,6 @@ const QuizPage = ({ user }: { user: User }) => {
       if (!id) return;
       const t = await storageService.getTestById(id);
       if (t) {
-        // FILTER INVALID QUESTIONS
         const validQuestions = t.questions.filter(q => 
             q.text.trim().length > 0 && 
             q.correctOptionId && 
@@ -729,52 +806,70 @@ const QuizPage = ({ user }: { user: User }) => {
     loadTest();
   }, [id]);
 
+  const handleOptionClick = (optId: string) => {
+      if (answered || !test) return;
+      
+      const currentQ = test.questions[currentQuestionIndex];
+      const isCorrect = optId === currentQ.correctOptionId;
+      
+      setSelectedOptionId(optId);
+      setAnswered(true);
+
+      const newAnswer: AnswerDetail = {
+          questionId: currentQ.id,
+          questionText: currentQ.text,
+          selectedOptionId: optId,
+          correctOptionId: currentQ.correctOptionId,
+          options: currentQ.options,
+          isCorrect
+      };
+      
+      setAnswers(prev => [...prev, newAnswer]);
+  };
+
   const nextQuestion = async () => {
-    if (!test || !selectedOptionId) return;
-    const currentQuestion = test.questions[currentQuestionIndex];
-    const isCorrect = selectedOptionId === currentQuestion.correctOptionId;
-
-    const newAnswers = [...answers, {
-      questionId: currentQuestion.id,
-      questionText: currentQuestion.text,
-      selectedOptionId: selectedOptionId,
-      correctOptionId: currentQuestion.correctOptionId,
-      options: currentQuestion.options,
-      isCorrect
-    }];
-    setAnswers(newAnswers);
-    setSelectedOptionId(null);
-
-    if (currentQuestionIndex < test.questions.length - 1) {
-      setCurrentQuestionIndex(prev => prev + 1);
-    } else {
-      const score = newAnswers.filter(a => a.isCorrect).length;
-      await storageService.saveResult({
-        id: generateId(),
-        userId: user.uid,
-        testId: test.id,
-        testTitle: test.title,
-        date: Date.now(),
-        score: Math.round((score / test.questions.length) * 10),
-        totalQuestions: test.questions.length,
-        details: newAnswers
-      });
-      setShowResult(true);
-    }
+      if (!test) return;
+      
+      if (currentQuestionIndex < test.questions.length - 1) {
+          setAnswered(false);
+          setSelectedOptionId(null);
+          setCurrentQuestionIndex(prev => prev + 1);
+      } else {
+          // Finish
+          const score = answers.filter(a => a.isCorrect).length; // answers already includes current one
+          await storageService.saveResult({
+            id: generateId(),
+            userId: user.uid,
+            testId: test.id,
+            testTitle: test.title,
+            date: Date.now(),
+            score: Math.round((score / test.questions.length) * 10),
+            totalQuestions: test.questions.length,
+            details: answers
+          });
+          setShowResult(true);
+      }
   };
 
   if (loading) return <div className="flex justify-center pt-20"><Loader2 className="animate-spin text-brand-500" /></div>;
-  if (!test || test.questions.length === 0) return <div className="p-8 text-center"><h2 className="text-xl font-bold mb-2">Oops...</h2><p>Este test no tiene preguntas válidas o completas.</p><Button onClick={() => navigate('/')} className="mt-4">Volver</Button></div>;
+  if (!test || test.questions.length === 0) return <div className="p-8 text-center"><h2 className="text-xl font-bold mb-2">Oops...</h2><p>Este test no tiene preguntas válidas.</p><Button onClick={() => navigate('/')} className="mt-4">Volver</Button></div>;
 
   if (showResult) {
-    const score = answers.filter(a => a.isCorrect).length;
+    const correctCount = answers.filter(a => a.isCorrect).length;
+    const totalCount = test.questions.length;
+    const percentage = Math.round((correctCount / totalCount) * 100);
+
     return (
       <div className="max-w-2xl mx-auto p-6 pb-24 animate-in zoom-in-95">
         <div className="bg-white dark:bg-slate-800 rounded-3xl p-8 text-center shadow-sm border border-slate-100 dark:border-slate-700 mb-6">
-           <div className="text-6xl font-black text-brand-600 dark:text-brand-400 mb-2">{Math.round((score / test.questions.length) * 10)}</div>
-           <p className="text-slate-500 dark:text-slate-400 mb-6 font-medium uppercase tracking-wide">Puntuación Final</p>
+           <div className="text-6xl font-black text-brand-600 dark:text-brand-400 mb-2">{percentage}%</div>
+           <p className="text-slate-500 dark:text-slate-400 mb-6 font-medium uppercase tracking-wide">
+               Aciertos: {correctCount} de {totalCount}
+           </p>
            <Button onClick={() => navigate('/')} className="w-full py-3 shadow-lg shadow-brand-500/20">Volver al Inicio</Button>
         </div>
+        
+        {/* Detail Review */}
         <div className="space-y-4">
           {answers.map((ans, idx) => (
             <div key={idx} className={`bg-white dark:bg-slate-800 p-4 rounded-xl border-l-4 ${ans.isCorrect ? 'border-green-500' : 'border-red-500'} shadow-sm`}>
@@ -783,9 +878,17 @@ const QuizPage = ({ user }: { user: User }) => {
                  const isSelected = opt.id === ans.selectedOptionId;
                  const isCorrect = opt.id === ans.correctOptionId;
                  let bg = "bg-slate-50 dark:bg-slate-900";
+                 // Highlight correct answer always if wrong, or just correct if right
                  if (isCorrect) bg = "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 ring-1 ring-green-500";
-                 else if (isSelected) bg = "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 ring-1 ring-red-500";
-                 return <div key={opt.id} className={`p-3 rounded-lg mb-2 text-sm font-medium ${bg} flex justify-between`}><span>{opt.text}</span>{isCorrect && <CheckCircle size={16}/>}{isSelected && !isCorrect && <XCircle size={16}/>}</div>
+                 else if (isSelected && !isCorrect) bg = "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 ring-1 ring-red-500";
+                 
+                 return (
+                     <div key={opt.id} className={`p-3 rounded-lg mb-2 text-sm font-medium ${bg} flex justify-between`}>
+                         <span>{opt.text}</span>
+                         {isCorrect && <CheckCircle size={16}/>}
+                         {isSelected && !isCorrect && <XCircle size={16}/>}
+                     </div>
+                 )
                })}
             </div>
           ))}
@@ -807,23 +910,45 @@ const QuizPage = ({ user }: { user: User }) => {
       <div className="flex-1 overflow-y-auto py-4">
         <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-8 leading-relaxed">{question.text}</h2>
         <div className="space-y-3">
-          {question.options.map(opt => (
-            <button
-              key={opt.id}
-              onClick={() => setSelectedOptionId(opt.id)}
-              className={`w-full p-4 rounded-xl border-2 text-left transition-all duration-200 group relative ${selectedOptionId === opt.id ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20 dark:border-brand-500 shadow-md shadow-brand-100 dark:shadow-none' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-brand-200 dark:hover:border-slate-600'}`}
-            >
-              <span className={`font-medium ${selectedOptionId === opt.id ? 'text-brand-700 dark:text-brand-300' : 'text-slate-700 dark:text-slate-300'}`}>{opt.text}</span>
-              {selectedOptionId === opt.id && <div className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 bg-brand-500 rounded-full animate-in zoom-in duration-200"/>}
-            </button>
-          ))}
+          {question.options.map(opt => {
+             // Visual State Logic
+             let stateClass = 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-brand-200 dark:hover:border-slate-600';
+             let textClass = 'text-slate-700 dark:text-slate-300';
+             
+             if (answered) {
+                 if (opt.id === question.correctOptionId) {
+                     stateClass = 'border-green-500 bg-green-50 dark:bg-green-900/20';
+                     textClass = 'text-green-700 dark:text-green-300';
+                 } else if (opt.id === selectedOptionId) {
+                     stateClass = 'border-red-500 bg-red-50 dark:bg-red-900/20';
+                     textClass = 'text-red-700 dark:text-red-300';
+                 } else {
+                     stateClass = 'opacity-50 border-slate-200 dark:border-slate-800';
+                 }
+             }
+
+             return (
+                <button
+                  key={opt.id}
+                  onClick={() => handleOptionClick(opt.id)}
+                  disabled={answered}
+                  className={`w-full p-4 rounded-xl border-2 text-left transition-all duration-200 group relative ${stateClass}`}
+                >
+                  <span className={`font-medium ${textClass}`}>{opt.text}</span>
+                  {answered && opt.id === question.correctOptionId && <CheckCircle className="absolute right-4 top-1/2 -translate-y-1/2 text-green-500" size={20}/>}
+                  {answered && opt.id === selectedOptionId && opt.id !== question.correctOptionId && <XCircle className="absolute right-4 top-1/2 -translate-y-1/2 text-red-500" size={20}/>}
+                </button>
+             );
+          })}
         </div>
       </div>
 
       <div className="py-6">
-        <Button onClick={nextQuestion} disabled={!selectedOptionId} className="w-full py-4 text-lg shadow-xl shadow-brand-500/20 transition-all active:scale-95">
-          {currentQuestionIndex === test.questions.length - 1 ? 'Terminar Test' : 'Siguiente Pregunta'}
-        </Button>
+        {answered && (
+            <Button onClick={nextQuestion} className="w-full py-4 text-lg shadow-xl shadow-brand-500/20 animate-in slide-in-from-bottom-2 fade-in">
+              {currentQuestionIndex === test.questions.length - 1 ? 'Ver Resultados' : 'Siguiente Pregunta'}
+            </Button>
+        )}
       </div>
     </div>
   );
@@ -925,6 +1050,7 @@ const App = () => {
       }}>
         <Routes>
           <Route path="/" element={<HomePage user={user} />} />
+          <Route path="/history" element={<HistoryPage user={user} />} />
           <Route path="/editor" element={<EditorPage user={user} />} />
           <Route path="/editor/:id" element={<EditorPage user={user} />} />
           <Route path="/quiz/:id" element={<QuizPage user={user} />} />

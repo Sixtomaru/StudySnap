@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   Home, 
-  History, 
+  Trophy, // Icono para Resultados/Historial
   Settings, 
   Plus, 
   Camera, 
@@ -24,9 +24,6 @@ export const Layout: React.FC<LayoutProps> = ({ children, onFabAction }) => {
   const [showFabMenu, setShowFabMenu] = useState(false);
 
   // Ocultar layout en login, quiz o editor (el editor tiene su propio header)
-  // Aunque el usuario pidió mantener la barra, el Editor suele necesitar pantalla completa.
-  // Sin embargo, para cumplir con "navegación guarda", si mostramos la barra, debemos manejarlo.
-  // Para simplificar la validación de salida del editor, ocultaremos el layout en /editor y /quiz
   const isFullScreen = location.pathname.startsWith('/login') || location.pathname.startsWith('/quiz') || location.pathname.startsWith('/editor');
 
   const isActive = (path: string) => location.pathname === path;
@@ -63,7 +60,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, onFabAction }) => {
 
         <nav className="space-y-2 flex-1">
           <NavItem path="/" icon={Home} label="Inicio" />
-          {/* Placeholder for History page if implemented later */}
+          <NavItem path="/history" icon={Trophy} label="Resultados" />
           <NavItem path="/settings" icon={Settings} label="Ajustes" />
         </nav>
 
@@ -85,18 +82,27 @@ export const Layout: React.FC<LayoutProps> = ({ children, onFabAction }) => {
       </main>
 
       {/* --- MOBILE BOTTOM BAR --- */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-slate-800/90 backdrop-blur-lg border-t border-slate-200 dark:border-slate-700 px-6 py-4 flex justify-between items-center z-40 pb-safe">
+      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-slate-800/90 backdrop-blur-lg border-t border-slate-200 dark:border-slate-700 px-6 py-4 grid grid-cols-4 gap-2 items-center z-40 pb-safe">
+        {/* Usamos grid para distribuir 4 elementos: Home, Historial, FAB (centro-ish), Settings */}
+        
         <button 
           onClick={() => navigate('/')}
-          className={`p-2 rounded-xl transition-colors ${isActive('/') ? 'text-brand-600 bg-brand-50 dark:bg-slate-700' : 'text-slate-400'}`}
+          className={`flex flex-col items-center justify-center p-2 rounded-xl transition-colors ${isActive('/') ? 'text-brand-600' : 'text-slate-400'}`}
         >
-          <Home size={28} />
+          <Home size={26} strokeWidth={isActive('/') ? 2.5 : 2}/>
         </button>
 
-        {/* FAB Container */}
-        <div className="relative -top-8">
+        <button 
+          onClick={() => navigate('/history')}
+          className={`flex flex-col items-center justify-center p-2 rounded-xl transition-colors ${isActive('/history') ? 'text-brand-600' : 'text-slate-400'}`}
+        >
+          <Trophy size={26} strokeWidth={isActive('/history') ? 2.5 : 2}/>
+        </button>
+
+        {/* FAB Container (Absolute positioned relative to screen center or just in flow) */}
+        <div className="relative flex justify-center items-center -top-6">
            {showFabMenu && (
-             <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-4 flex flex-col gap-3 w-max animate-in slide-in-from-bottom-5 fade-in duration-200">
+             <div className="absolute bottom-full mb-4 flex flex-col gap-3 w-max animate-in slide-in-from-bottom-5 fade-in duration-200">
                 <button 
                   onClick={() => { setShowFabMenu(false); onFabAction('create'); }}
                   className="flex items-center gap-3 bg-white dark:bg-slate-700 text-slate-700 dark:text-white px-4 py-2 rounded-full shadow-lg border border-slate-100 dark:border-slate-600"
@@ -113,17 +119,17 @@ export const Layout: React.FC<LayoutProps> = ({ children, onFabAction }) => {
            )}
            <button 
              onClick={() => setShowFabMenu(!showFabMenu)}
-             className={`w-16 h-16 rounded-full flex items-center justify-center shadow-lg shadow-brand-500/30 transition-transform duration-300 ${showFabMenu ? 'bg-slate-800 rotate-45' : 'bg-brand-600 hover:scale-105'}`}
+             className={`w-14 h-14 rounded-full flex items-center justify-center shadow-lg shadow-brand-500/30 transition-transform duration-300 ${showFabMenu ? 'bg-slate-800 rotate-45' : 'bg-brand-600 hover:scale-105'}`}
            >
-             <Plus size={32} className="text-white" />
+             <Plus size={28} className="text-white" />
            </button>
         </div>
 
         <button 
           onClick={() => navigate('/settings')}
-          className={`p-2 rounded-xl transition-colors ${isActive('/settings') ? 'text-brand-600 bg-brand-50 dark:bg-slate-700' : 'text-slate-400'}`}
+          className={`flex flex-col items-center justify-center p-2 rounded-xl transition-colors ${isActive('/settings') ? 'text-brand-600' : 'text-slate-400'}`}
         >
-          <Settings size={28} />
+          <Settings size={26} strokeWidth={isActive('/settings') ? 2.5 : 2}/>
         </button>
       </div>
 
