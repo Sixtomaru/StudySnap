@@ -10,12 +10,18 @@ export interface Question {
   correctOptionId: string; // The ID of the correct option
 }
 
+export interface PDFProgress {
+  totalPages: number;
+  lastProcessedPage: number;
+}
+
 export interface Test {
   id: string;
   userId: string; // ID del usuario propietario
   title: string;
   createdAt: number;
   questions: Question[];
+  pdfMetadata?: PDFProgress; // Guardamos el progreso aquí
 }
 
 export interface TestResult {

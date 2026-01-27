@@ -37,24 +37,35 @@ import {
   Cloud,
   Link as LinkIcon,
   RefreshCw,
-  AlertTriangle
+  AlertTriangle,
+  BookOpen,
+  FileUp
 } from 'lucide-react';
 import { signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { auth, googleProvider } from './services/firebaseConfig';
-import { Button, Card, Input, TextArea, Badge } from './components/UI';
+import { Button, Card, Input, TextArea, Badge, Toast } from './components/UI';
+import { Layout } from './components/Layout'; // Nuevo componente
 import { storageService } from './services/storageService';
-// CAMBIO: Volvemos a la IA porque el OCR local falló en calidad
-import { parseFileToQuiz } from './services/geminiService';
-import { Test, Question, Option, TestResult, AnswerDetail } from './types';
+import { parseFileToQuiz, getPDFPageCount, processPDFBatch } from './services/geminiService';
+import { Test, Question, Option, TestResult, AnswerDetail, PDFProgress } from './types';
 
 // --- Utils ---
 const generateId = () => Math.random().toString(36).substring(2, 9);
+// Hook para detectar si es móvil (para el icono de cámara vs upload)
+const useIsMobile = () => {
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+  return isMobile;
+};
 
-// --- Auth Context / Hook simple ---
+// --- Auth Context ---
 const useAuth = () => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
@@ -62,22 +73,26 @@ const useAuth = () => {
     });
     return () => unsubscribe();
   }, []);
-
   return { user, loading };
 };
 
-// --- Dark Mode Context ---
+// --- Dark Mode Context (Arreglado) ---
+// Se exporta el contexto para usarlo, o se usa un hook global.
+// Para simplificar sin crear más archivos, lo manejamos aquí.
 const useDarkMode = () => {
   const [isDark, setIsDark] = useState(() => {
-    return localStorage.getItem('theme') === 'dark';
+    // Verificar preferencia guardada o del sistema
+    if (localStorage.getItem('theme') === 'dark') return true;
+    return false;
   });
 
   useEffect(() => {
+    const root = window.document.documentElement;
     if (isDark) {
-      document.documentElement.classList.add('dark');
+      root.classList.add('dark');
       localStorage.setItem('theme', 'dark');
     } else {
-      document.documentElement.classList.remove('dark');
+      root.classList.remove('dark');
       localStorage.setItem('theme', 'light');
     }
   }, [isDark]);
@@ -87,16 +102,8 @@ const useDarkMode = () => {
 
 // --- Components ---
 
-// Modal para seleccionar lista existente o crear nueva
-const ListSelectionModal = ({ 
-  user, 
-  onSelect, 
-  onCancel 
-}: { 
-  user: User, 
-  onSelect: (testId: string | null, title?: string) => void, 
-  onCancel: () => void 
-}) => {
+// Modal Selección Lista
+const ListSelectionModal = ({ user, onSelect, onCancel }: { user: User, onSelect: (testId: string | null, title?: string) => void, onCancel: () => void }) => {
   const [tests, setTests] = useState<Test[]>([]);
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState<'existing' | 'new'>('existing');
@@ -116,51 +123,30 @@ const ListSelectionModal = ({
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl p-6 w-full max-w-md border-2 border-slate-100 dark:border-slate-700">
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl p-6 w-full max-w-md border-2 border-slate-100 dark:border-slate-700 animate-in zoom-in-95 duration-200">
         <h2 className="text-xl font-bold mb-4 text-slate-800 dark:text-white">¿Dónde guardamos esto?</h2>
-        
         {mode === 'existing' && tests.length > 0 ? (
           <div className="space-y-3">
              <p className="text-sm text-slate-500 dark:text-slate-400 mb-2">Elige una lista existente:</p>
              <div className="max-h-60 overflow-y-auto space-y-2 custom-scrollbar">
                {tests.map(t => (
-                 <button 
-                   key={t.id}
-                   onClick={() => onSelect(t.id, t.title)}
-                   className="w-full text-left p-3 rounded-xl border border-slate-200 bg-slate-50 hover:border-brand-500 hover:bg-brand-50 dark:bg-slate-700 dark:border-slate-600 dark:hover:border-brand-500 dark:text-slate-200 transition-all flex justify-between items-center"
-                 >
+                 <button key={t.id} onClick={() => onSelect(t.id, t.title)} className="w-full text-left p-3 rounded-xl border border-slate-200 bg-slate-50 hover:border-brand-500 hover:bg-brand-50 dark:bg-slate-700 dark:border-slate-600 dark:hover:border-brand-500 dark:text-slate-200 transition-all flex justify-between items-center">
                    <span className="font-medium truncate">{t.title}</span>
                    <span className="text-xs text-slate-400 bg-white dark:bg-slate-800 px-2 py-1 rounded-md border border-slate-100 dark:border-slate-600">{t.questions.length}</span>
                  </button>
                ))}
              </div>
              <div className="pt-4 border-t border-slate-100 dark:border-slate-700 mt-2">
-               <Button variant="secondary" onClick={() => setMode('new')} className="w-full dark:bg-slate-700 dark:text-white dark:border-slate-600">
-                 + Crear Nueva Lista
-               </Button>
+               <Button variant="secondary" onClick={() => setMode('new')} className="w-full dark:bg-slate-700 dark:text-white dark:border-slate-600">+ Crear Nueva Lista</Button>
              </div>
           </div>
         ) : (
           <div className="space-y-4">
             <p className="text-sm text-slate-500 dark:text-slate-400">Crear una lista nueva:</p>
-            <Input 
-              autoFocus
-              placeholder="Ej: Matemáticas T1" 
-              value={newTitle}
-              onChange={e => setNewTitle(e.target.value)}
-              className="bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white"
-            />
+            <Input autoFocus placeholder="Ej: Matemáticas T1" value={newTitle} onChange={e => setNewTitle(e.target.value)} className="bg-slate-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white"/>
             <div className="flex gap-2">
-               {tests.length > 0 && (
-                 <Button variant="ghost" onClick={() => setMode('existing')}>Volver</Button>
-               )}
-               <Button 
-                 className="flex-1"
-                 disabled={!newTitle.trim()}
-                 onClick={() => onSelect(null, newTitle)}
-               >
-                 Crear y Continuar
-               </Button>
+               {tests.length > 0 && (<Button variant="ghost" onClick={() => setMode('existing')}>Volver</Button>)}
+               <Button className="flex-1" disabled={!newTitle.trim()} onClick={() => onSelect(null, newTitle)}>Crear y Continuar</Button>
             </div>
           </div>
         )}
@@ -177,142 +163,33 @@ const SettingsPage = () => {
   const navigate = useNavigate();
 
   return (
-    <div className="pb-24 max-w-lg mx-auto p-4 animate-in fade-in zoom-in-95 duration-300">
+    <div className="animate-in fade-in zoom-in-95 duration-300">
       <header className="flex items-center gap-2 mb-8 md:hidden">
          <button onClick={() => navigate('/')} className="p-2 hover:bg-white/50 rounded-full text-slate-700 dark:text-slate-300"><ArrowLeft /></button>
          <h1 className="font-bold text-2xl text-slate-800 dark:text-white">Opciones</h1>
       </header>
-
       <h1 className="hidden md:block font-bold text-3xl text-slate-800 dark:text-white mb-8">Configuración</h1>
 
-      <div className="space-y-6">
-        {/* Modo Oscuro */}
-        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
-          <div className="p-6 flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="bg-brand-50 dark:bg-slate-700 p-3 rounded-xl text-brand-600 dark:text-brand-400">
-                {isDark ? <Moon size={24} /> : <Sun size={24} />}
-              </div>
-              <div>
-                <h3 className="font-bold text-lg text-slate-800 dark:text-white">Modo Oscuro</h3>
-                <p className="text-sm text-slate-500 dark:text-slate-400">Cambiar entre tema claro y oscuro</p>
-              </div>
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden mb-6">
+        <div className="p-6 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="bg-brand-50 dark:bg-slate-700 p-3 rounded-xl text-brand-600 dark:text-brand-400">
+              {isDark ? <Moon size={24} /> : <Sun size={24} />}
             </div>
-            
-            <button 
-              onClick={toggle}
-              className={`w-14 h-8 rounded-full p-1 transition-colors duration-300 ease-in-out ${isDark ? 'bg-brand-600' : 'bg-slate-200'}`}
-            >
-              <div className={`bg-white w-6 h-6 rounded-full shadow-sm transform transition-transform duration-300 ${isDark ? 'translate-x-6' : 'translate-x-0'}`} />
-            </button>
+            <div>
+              <h3 className="font-bold text-lg text-slate-800 dark:text-white">Modo Oscuro</h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400">Cambiar entre tema claro y oscuro</p>
+            </div>
           </div>
+          <button onClick={toggle} className={`w-14 h-8 rounded-full p-1 transition-colors duration-300 ease-in-out ${isDark ? 'bg-brand-600' : 'bg-slate-200'}`}>
+            <div className={`bg-white w-6 h-6 rounded-full shadow-sm transform transition-transform duration-300 ${isDark ? 'translate-x-6' : 'translate-x-0'}`} />
+          </button>
         </div>
-        
-        {/* Info */}
-        <div className="text-center p-4">
-            <p className="text-sm text-slate-400">
-              ¿Problemas con el servidor? Contacta con el administrador para revisar la cuota de la API.
-            </p>
-        </div>
-
       </div>
       
-      <p className="text-center text-slate-400 text-xs mt-8">StudySnap v1.4 • Gemini Powered</p>
-    </div>
-  );
-};
-
-const SharePage = ({ user }: { user: User }) => {
-  const { id } = useParams();
-  const navigate = useNavigate();
-  const [test, setTest] = useState<Test | undefined>(undefined);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const load = async () => {
-      if(!id) return;
-      const t = await storageService.getTestById(id);
-      setTest(t);
-      setLoading(false);
-    }
-    load();
-  }, [id]);
-
-  const handleImport = async () => {
-     if(!id) return;
-     try {
-       await storageService.copyTest(id, user.uid);
-       alert("Lista importada correctamente!");
-       navigate('/');
-     } catch(e) {
-       alert("Error al importar la lista.");
-     }
-  }
-
-  if(loading) return <div className="flex justify-center h-screen items-center"><Loader2 className="animate-spin text-brand-500"/></div>;
-  
-  if(!test) return (
-    <div className="flex flex-col items-center justify-center h-screen p-4 text-center">
-      <XCircle size={48} className="text-red-400 mb-4"/>
-      <h2 className="text-xl font-bold">Lista no encontrada</h2>
-      <p className="text-slate-500 mt-2">El enlace puede ser incorrecto o la lista fue eliminada.</p>
-      <Button onClick={() => navigate('/')} className="mt-6">Ir al Inicio</Button>
-    </div>
-  );
-
-  return (
-    <div className="flex flex-col items-center justify-center h-screen p-6 text-center max-w-md mx-auto">
-       <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-xl w-full border border-slate-100 dark:border-slate-700">
-          <div className="bg-brand-100 dark:bg-slate-700 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
-             <Download size={32} className="text-brand-600 dark:text-brand-400"/>
-          </div>
-          <h1 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">Importar Lista</h1>
-          <p className="text-slate-500 dark:text-slate-400 mb-6">
-            ¿Quieres añadir <strong>"{test.title}"</strong> ({test.questions.length} preguntas) a tu colección?
-          </p>
-          <div className="flex gap-3">
-             <Button variant="secondary" onClick={() => navigate('/')} className="flex-1 dark:bg-slate-700 dark:text-white dark:border-slate-600">Cancelar</Button>
-             <Button onClick={handleImport} className="flex-1">Importar</Button>
-          </div>
-       </div>
-    </div>
-  );
-};
-
-const LoginPage = () => {
-  const [errorMessage, setErrorMessage] = useState('');
-
-  const handleGoogleLogin = async () => {
-    try {
-      setErrorMessage('');
-      await signInWithPopup(auth, googleProvider);
-    } catch (err: any) {
-      console.error(err);
-      setErrorMessage(err.message);
-    }
-  };
-
-  return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center">
-      <div className="bg-white/90 dark:bg-slate-800/90 backdrop-blur p-8 rounded-3xl shadow-xl max-w-sm w-full border border-white dark:border-slate-700">
-        <div className="bg-gradient-to-r from-brand-500 to-indigo-600 w-20 h-20 rounded-2xl rotate-3 flex items-center justify-center mx-auto mb-6 shadow-lg shadow-brand-500/30">
-          <FileText className="text-white" size={40} />
-        </div>
-        <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2 tracking-tight">StudySnap</h1>
-        <p className="text-slate-500 dark:text-slate-400 mb-8 leading-relaxed">Escanea, crea y repasa tus tests en cualquier lugar.</p>
-        
-        <Button 
-          variant="primary"
-          onClick={handleGoogleLogin} 
-          className="w-full flex items-center justify-center gap-3 py-4 text-lg shadow-lg shadow-brand-500/20 hover:shadow-brand-500/40 transition-all"
-        >
-          <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-6 h-6 bg-white rounded-full p-0.5" />
-          <span>Entrar con Google</span>
-        </Button>
-        
-        {errorMessage && (
-          <p className="mt-4 text-red-500 text-sm bg-red-50 p-2 rounded">{errorMessage}</p>
-        )}
+      <div className="text-center p-4">
+          <Button variant="danger" onClick={() => signOut(auth)} className="w-full md:w-auto">Cerrar Sesión</Button>
+          <p className="text-center text-slate-400 text-xs mt-8">StudySnap v1.6 • Gemini Powered</p>
       </div>
     </div>
   );
@@ -347,24 +224,15 @@ const HomePage = ({ user }: { user: User }) => {
     const url = `${window.location.origin}/#/share/${id}`;
     try {
        await navigator.clipboard.writeText(url);
-       alert("Enlace copiado al portapapeles! Envíaselo a quien quieras.");
+       alert("Enlace copiado al portapapeles!");
     } catch(err) {
        alert("No se pudo copiar: " + url);
     }
   }
 
-  const handleLogout = () => {
-    if(confirm("¿Cerrar sesión?")) signOut(auth);
-  }
-
-  // Floating Action Button for creating new test
-  const handleCreate = () => {
-    navigate('/editor?mode=camera');
-  }
-
   return (
-    <div className="space-y-8 pb-24 md:pb-8 w-full animate-in fade-in zoom-in-95 duration-300 relative min-h-screen">
-      <header className="flex justify-between items-center bg-white/80 dark:bg-slate-800/80 backdrop-blur-md p-6 rounded-2xl shadow-sm border border-white/50 dark:border-slate-700">
+    <div className="space-y-8 animate-in fade-in zoom-in-95 duration-300">
+      <header className="flex justify-between items-center bg-white/80 dark:bg-slate-800/80 backdrop-blur-md p-6 rounded-2xl shadow-sm border border-white/50 dark:border-slate-700 md:hidden">
         <div className="flex items-center gap-4">
           <div className="bg-brand-100 dark:bg-slate-700 p-3 rounded-full border border-brand-200 dark:border-slate-600 shadow-sm">
             <UserIcon className="text-brand-600 dark:text-brand-400 w-6 h-6" />
@@ -374,51 +242,38 @@ const HomePage = ({ user }: { user: User }) => {
             <p className="text-slate-500 dark:text-slate-400 text-sm">Hola, {user.displayName?.split(' ')[0]}</p>
           </div>
         </div>
-        
-        <div className="flex gap-2">
-           <button 
-             onClick={() => navigate('/settings')}
-             className="p-2 text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 rounded-full transition-colors"
-             title="Configuración"
-           >
-             <Settings size={24} />
-           </button>
-           <button 
-             onClick={handleLogout}
-             className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:text-slate-500 dark:hover:bg-slate-700 rounded-full transition-colors" 
-             title="Cerrar sesión"
-           >
-             <LogOut size={24} />
-           </button>
-        </div>
       </header>
+      
+      {/* Header Desktop */}
+      <div className="hidden md:flex justify-between items-end mb-6">
+         <h2 className="text-3xl font-bold text-slate-800 dark:text-white">Mis Listas</h2>
+         <span className="text-slate-400">{tests.length} listas</span>
+      </div>
 
       {loading ? (
-        <div className="flex justify-center py-20">
-          <Loader2 className="animate-spin text-brand-500" size={40} />
-        </div>
+        <div className="flex justify-center py-20"><Loader2 className="animate-spin text-brand-500" size={40} /></div>
       ) : tests.length === 0 ? (
         <div className="text-center py-20 text-slate-400 bg-white/60 dark:bg-slate-800/60 rounded-3xl border border-white dark:border-slate-700 shadow-sm mx-auto max-w-lg">
           <div className="bg-slate-100 dark:bg-slate-700 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6">
             <FileText size={40} className="text-slate-300 dark:text-slate-500" />
           </div>
           <h2 className="text-xl font-semibold text-slate-600 dark:text-slate-300 mb-2">No tienes listas guardadas</h2>
-          <p className="text-slate-500 dark:text-slate-400">Usa el botón + para escanear tu primer test.</p>
+          <p className="text-slate-500 dark:text-slate-400">Usa el botón + para crear tu primera lista.</p>
         </div>
       ) : (
-        <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4">
+        <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3">
           {tests.map(test => (
-            <Card key={test.id} onClick={() => navigate(`/quiz/${test.id}`)} className="bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 hover:border-brand-200 dark:hover:border-brand-700 hover:shadow-lg transition-all cursor-pointer h-full flex flex-col justify-between group">
+            <Card key={test.id} onClick={() => navigate(`/editor/${test.id}`)} className="bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 hover:border-brand-200 dark:hover:border-brand-700 hover:shadow-lg transition-all cursor-pointer h-full flex flex-col justify-between group">
               <div>
                 <div className="flex justify-between items-start mb-4">
                   <div className="bg-brand-50 dark:bg-slate-700 p-3 rounded-xl text-brand-600 dark:text-brand-400 border border-brand-100 dark:border-slate-600">
                     <FileText size={24}/>
                   </div>
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={(e) => handleShare(e, test.id)} className="text-slate-300 hover:text-brand-500 p-2 hover:bg-brand-50 dark:hover:bg-slate-700 rounded-lg transition-colors" title="Compartir">
+                  <div className="flex gap-1">
+                    <button onClick={(e) => handleShare(e, test.id)} className="text-slate-400 hover:text-brand-600 dark:text-slate-500 dark:hover:text-brand-400 p-2 hover:bg-brand-50 dark:hover:bg-slate-700 rounded-lg transition-colors">
                       <Share2 size={18} />
                     </button>
-                    <button onClick={(e) => handleDelete(e, test.id)} className="text-slate-300 hover:text-red-500 p-2 hover:bg-red-50 dark:hover:bg-slate-700 rounded-lg transition-colors" title="Borrar">
+                    <button onClick={(e) => handleDelete(e, test.id)} className="text-slate-400 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400 p-2 hover:bg-red-50 dark:hover:bg-slate-700 rounded-lg transition-colors">
                       <Trash2 size={18} />
                     </button>
                   </div>
@@ -428,16 +283,8 @@ const HomePage = ({ user }: { user: User }) => {
                     <Badge color="blue">{test.questions.length} preguntas</Badge>
                 </div>
               </div>
-              
-              <div className="flex gap-3 mt-auto pt-4 border-t border-slate-100 dark:border-slate-700">
-                 <Button 
-                    variant="secondary" 
-                    className="flex-1 text-sm py-2 dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600"
-                    onClick={(e) => { e.stopPropagation(); navigate(`/editor/${test.id}?mode=manual`); }}
-                 >
-                   Editar
-                 </Button>
-                 <Button variant="primary" className="flex-1 text-sm py-2 flex justify-center items-center gap-2 shadow-md shadow-brand-200 dark:shadow-none">
+              <div className="pt-4 border-t border-slate-100 dark:border-slate-700">
+                 <Button variant="primary" onClick={(e) => {e.stopPropagation(); navigate(`/quiz/${test.id}`)}} className="w-full text-sm py-2 flex justify-center items-center gap-2 shadow-md shadow-brand-200 dark:shadow-none">
                    <Play size={16} /> Jugar
                  </Button>
               </div>
@@ -445,33 +292,44 @@ const HomePage = ({ user }: { user: User }) => {
           ))}
         </div>
       )}
-      
-      {/* Floating Action Button */}
-      <div className="fixed bottom-6 right-6 z-10">
-        <Button onClick={handleCreate} className="rounded-full w-14 h-14 flex items-center justify-center shadow-lg shadow-brand-500/40">
-           <Plus size={28} />
-        </Button>
-      </div>
     </div>
   );
 };
+
+// --- EDITOR PAGE (Redesigned) ---
+
+interface PDFState {
+    base64: string;
+    totalPages: number;
+    nextPage: number;
+    lastProcessedPage: number;
+}
 
 const EditorPage = ({ user }: { user: User }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
-  const modeParam = searchParams.get('mode'); // 'manual' | 'camera'
+  const modeParam = searchParams.get('mode'); 
   const { id: editId } = useParams();
+  const isMobile = useIsMobile();
 
-  // State
+  // State Global del Editor
+  const [testId, setTestId] = useState<string | null>(editId || null);
   const [title, setTitle] = useState('');
   const [questions, setQuestions] = useState<Question[]>([]);
+  // 'list' = Vista general de preguntas, 'detail' = Editando una pregunta, 'scanner' = Subida
+  const [viewMode, setViewMode] = useState<'list' | 'detail' | 'scanner'>('list'); 
   const [currentQIndex, setCurrentQIndex] = useState(0);
+  const [lastEditedIndex, setLastEditedIndex] = useState<number | null>(null);
+
   const [isLoading, setIsLoading] = useState(false);
   const [progressMsg, setProgressMsg] = useState('');
   const [progressPercent, setProgressPercent] = useState(0); 
   const [showListSelector, setShowListSelector] = useState(false);
-  const [viewMode, setViewMode] = useState<'editor' | 'scanner'>(modeParam === 'camera' ? 'scanner' : 'editor');
+  
+  // PDF State
+  const [pdfState, setPdfState] = useState<PDFState | null>(null);
+  const [resumeMetadata, setResumeMetadata] = useState<PDFProgress | null>(null);
 
   // Inicialización
   useEffect(() => {
@@ -482,49 +340,131 @@ const EditorPage = ({ user }: { user: User }) => {
         if (test && test.userId === user.uid) {
           setTitle(test.title);
           setQuestions(test.questions);
-          if (modeParam === 'camera') {
-            setViewMode('scanner');
-          } else {
-            setViewMode('editor');
-            setCurrentQIndex(0);
+          if (test.pdfMetadata && test.pdfMetadata.lastProcessedPage < test.pdfMetadata.totalPages) {
+             setResumeMetadata(test.pdfMetadata);
           }
+          // Modo inicial depende del param
+          if (modeParam === 'camera') setViewMode('scanner');
+          else if (modeParam === 'manual') setViewMode('detail'); // Si es nuevo manual
+          else setViewMode('list'); // Por defecto lista
         } else {
-           alert("Error al cargar test.");
            navigate('/');
         }
         setIsLoading(false);
-        return;
-      }
-
-      if (modeParam && !editId) {
+      } else if (modeParam && !editId) {
         setShowListSelector(true);
       }
     };
     init();
   }, [editId, modeParam, user]);
 
+  // --- LOGIC: Guardado y Validación ---
+
+  const saveToStorage = async (qs: Question[], t: string, silent = false) => {
+      if(!testId && !t) return;
+      const validQs = qs.filter(q => q.text.trim()); // Solo preguntas con texto (aunque estén incompletas)
+      
+      let pdfMeta: PDFProgress | undefined = undefined;
+      if (pdfState) {
+          pdfMeta = { totalPages: pdfState.totalPages, lastProcessedPage: pdfState.lastProcessedPage };
+      } else if (resumeMetadata) {
+          pdfMeta = resumeMetadata;
+      }
+
+      const test: Test = {
+        id: testId || generateId(),
+        userId: user.uid,
+        title: t,
+        createdAt: Date.now(),
+        questions: validQs,
+        pdfMetadata: pdfMeta
+      };
+      
+      if(!testId) setTestId(test.id); // Set ID if new
+      await storageService.saveTest(test);
+      if(!silent) console.log("Auto-saved");
+      return test.id;
+  };
+
+  // Guardar al cambiar preguntas (Debounce simple o al navegar)
+  // Aquí optamos por guardar al cambiar de vista o acción importante
+  const handleAutoSave = () => saveToStorage(questions, title, true);
+
+  const validateQuestion = (q: Question) => {
+      const hasText = q.text.trim().length > 0;
+      const hasCorrect = !!q.correctOptionId;
+      const hasEmptyOption = q.options.some(o => !o.text.trim());
+      return { hasText, hasCorrect, hasEmptyOption };
+  };
+
+  const handleExitOrSave = async () => {
+     // Check for invalid questions
+     const invalidIndex = questions.findIndex(q => {
+         const v = validateQuestion(q);
+         return v.hasText && (!v.hasCorrect || v.hasEmptyOption);
+     });
+
+     if(invalidIndex !== -1) {
+         const confirmFix = confirm(
+             `La pregunta ${invalidIndex + 1} está incompleta (falta respuesta correcta o texto en opciones).\n\n` +
+             `Las preguntas incompletas NO aparecerán al jugar.\n\n` +
+             `¿Quieres corregirla ahora? (Cancelar para salir y guardar tal cual)`
+         );
+         if(confirmFix) {
+             setCurrentQIndex(invalidIndex);
+             setViewMode('detail');
+             return;
+         }
+     }
+
+     if (!title.trim()) { alert("Ponle un título a la lista"); return; }
+     
+     setIsLoading(true);
+     await saveToStorage(questions, title);
+     navigate('/');
+     setIsLoading(false);
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    let startPage = 1;
+    if (resumeMetadata && file.type.includes('pdf')) {
+        if (confirm(`¿Continuar desde página ${resumeMetadata.lastProcessedPage + 1}?`)) {
+            startPage = resumeMetadata.lastProcessedPage + 1;
+        }
+    }
+
     setIsLoading(true);
-    setProgressMsg("Iniciando...");
-    setProgressPercent(0);
+    setProgressMsg("Procesando...");
     
     const reader = new FileReader();
     reader.onloadend = async () => {
       try {
         const base64String = (reader.result as string).split(',')[1];
-        const extractedQuestions = await parseFileToQuiz(
-            base64String, 
-            file.type, 
-            (msg, percent) => {
-                setProgressMsg(msg);
-                setProgressPercent(percent);
+        let newQuestions: Question[] = [];
+        let totalPages = 0;
+
+        if(file.type.includes('pdf')) {
+            totalPages = await getPDFPageCount(base64String);
+            const pagesToRead = Math.min(5, totalPages - startPage + 1);
+            if(pagesToRead > 0) {
+                 newQuestions = await processPDFBatch(base64String, startPage, pagesToRead, (m, p) => { setProgressMsg(m); setProgressPercent(p); });
+                 setPdfState({ base64: base64String, totalPages, lastProcessedPage: startPage + pagesToRead - 1, nextPage: startPage + pagesToRead });
+                 setResumeMetadata(null);
             }
-        );
-        setQuestions(prev => [...prev, ...extractedQuestions]);
-        setViewMode('scanner');
+        } else {
+            newQuestions = await parseFileToQuiz(base64String, file.type, (m, p) => { setProgressMsg(m); setProgressPercent(p); });
+            setPdfState(null);
+        }
+
+        const updatedQuestions = [...questions, ...newQuestions];
+        setQuestions(updatedQuestions);
+        // Auto-save after batch load
+        await saveToStorage(updatedQuestions, title, true);
+        
+        setViewMode('list'); // Volver a lista tras escanear
 
       } catch (err: any) {
         alert(err.message);
@@ -538,284 +478,229 @@ const EditorPage = ({ user }: { user: User }) => {
     reader.readAsDataURL(file);
   };
 
-  const getCurrentQuestion = (): Question => {
-    if (currentQIndex === questions.length) {
-      return {
-        id: generateId(),
-        text: '',
-        options: Array(4).fill(null).map(() => ({ id: generateId(), text: '' })), 
-        correctOptionId: ''
-      };
-    }
-    return questions[currentQIndex];
+  // --- Navigation Helpers ---
+
+  const goToDetail = (index: number) => {
+      setCurrentQIndex(index);
+      setLastEditedIndex(index);
+      setViewMode('detail');
   };
 
-  const updateCurrentQuestion = (field: keyof Question, value: any) => {
-    const newQs = [...questions];
-    if (currentQIndex === questions.length) {
-       const newQ = getCurrentQuestion();
-       (newQ as any)[field] = value;
-       setQuestions([...newQs, newQ]);
-    } else {
-       (newQs[currentQIndex] as any)[field] = value;
-       setQuestions(newQs);
-    }
+  const goBackFromDetail = () => {
+      handleAutoSave();
+      setViewMode('list');
   };
 
-  const updateOption = (oIndex: number, text: string) => {
-    const q = getCurrentQuestion();
-    const newOptions = [...q.options];
-    newOptions[oIndex] = { ...newOptions[oIndex], text };
-    updateCurrentQuestion('options', newOptions);
-  };
-
-  const setCorrectOption = (oId: string) => {
-    updateCurrentQuestion('correctOptionId', oId);
-  };
-
-  const navigateQuestion = (direction: 'prev' | 'next') => {
-    if (direction === 'prev') {
-      if (currentQIndex > 0) setCurrentQIndex(prev => prev - 1);
-    } else {
-      if (currentQIndex < questions.length) setCurrentQIndex(prev => prev + 1);
-      else {
-        const current = getCurrentQuestion();
-        if(current.text.trim()) setCurrentQIndex(prev => prev + 1);
+  const goToLastEdited = () => {
+      if(lastEditedIndex !== null && lastEditedIndex < questions.length) {
+          setCurrentQIndex(lastEditedIndex);
+      } else {
+          setCurrentQIndex(questions.length > 0 ? questions.length - 1 : 0);
       }
-    }
+      setViewMode('detail');
   };
 
-  // Helpers
-  const goToFirst = () => setCurrentQIndex(0);
-  const goToPagePrompt = () => {
-    const page = prompt(`Ir a pregunta (1 - ${questions.length + 1}):`);
-    if (page) {
-       const pageNum = parseInt(page);
-       if (!isNaN(pageNum) && pageNum >= 1 && pageNum <= questions.length + 1) {
-          setCurrentQIndex(pageNum - 1);
-       }
-    }
-  };
+  // --- RENDER ---
 
-  const handleSave = async () => {
-    if (!title.trim()) return alert("Escribe un título para la lista.");
-    const validQuestions = questions.filter(q => q.text.trim() !== '');
-    if (validQuestions.length === 0) return alert("Añade al menos una pregunta.");
-    
-    // Permitimos guardar aunque no esté "perfecto", ya que ahora la edición manual es más importante
-    const missingAnswerIndex = questions.findIndex(q => q.text.trim() !== '' && !q.correctOptionId);
-    if (missingAnswerIndex !== -1) {
-        if(!confirm(`La pregunta ${missingAnswerIndex + 1} no tiene respuesta marcada. ¿Guardar de todas formas?`)) {
-            setViewMode('editor');
-            setCurrentQIndex(missingAnswerIndex);
-            return;
-        }
-    }
-
-    setIsLoading(true);
-    setProgressMsg("Guardando...");
-    setProgressPercent(100);
-    
-    try {
-      const test: Test = {
-        id: editId || generateId(), 
-        userId: user.uid,
-        title,
-        createdAt: Date.now(),
-        questions: validQuestions
-      };
-      await storageService.saveTest(test); 
-      navigate('/');
-    } catch (error: any) {
-       alert("Error al guardar: " + error.message);
-    } finally {
-       setIsLoading(false);
-       setProgressMsg('');
-    }
-  };
-
-  const onListSelectFinal = (id: string | null, newTitle?: string) => {
-    if (id) {
-       navigate(`/editor/${id}?mode=${modeParam}`, { replace: true });
-       setShowListSelector(false);
-    } else if (newTitle) {
-      setTitle(newTitle);
-      setQuestions([]);
-      if (modeParam === 'camera') setViewMode('scanner');
-      else {
-        setViewMode('editor');
-        setCurrentQIndex(0);
-      }
-      setShowListSelector(false);
-    }
-  };
-
-  const editQuestionFromList = (index: number) => {
-    setViewMode('editor');
-    setCurrentQIndex(index);
-  }
-
-  const addNewQuestionManual = () => {
-     setViewMode('editor');
-     setCurrentQIndex(questions.length); 
-  }
-
-  if (isLoading) {
-    return (
-      <div className="flex flex-col items-center justify-center h-screen bg-white/90 dark:bg-slate-900/90 backdrop-blur z-50 fixed inset-0">
-        <div className="w-full max-w-xs text-center">
-            <Loader2 className="animate-spin text-brand-600 mb-6 mx-auto" size={48} />
-            <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">{progressMsg || "Procesando..."}</h3>
-            <p className="text-slate-500 text-sm mb-6">Esto puede tardar unos segundos...</p>
-            <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-4 overflow-hidden shadow-inner border border-slate-300 dark:border-slate-600">
-               <div className="bg-brand-500 h-full rounded-full transition-all duration-500 ease-out relative overflow-hidden" style={{ width: `${progressPercent}%` }}>
-                  <div className="absolute inset-0 bg-white/20 animate-[pulse_2s_infinite]"></div>
-               </div>
-            </div>
-            <div className="text-right text-xs font-bold text-brand-600 dark:text-brand-400 mt-2">{progressPercent}%</div>
-        </div>
-      </div>
-    );
-  }
-
-  const activeQ = getCurrentQuestion();
-  const displayTotal = currentQIndex === questions.length ? questions.length + 1 : questions.length;
-  const displayIndex = currentQIndex + 1;
+  if (isLoading) return <div className="fixed inset-0 z-50 bg-white/90 dark:bg-slate-900/90 flex flex-col items-center justify-center"><Loader2 className="animate-spin text-brand-600 mb-4" size={48}/><p className="text-slate-800 dark:text-white font-bold">{progressMsg}</p><div className="w-64 h-2 bg-slate-200 rounded-full mt-4 overflow-hidden"><div className="h-full bg-brand-600 transition-all duration-300" style={{width: `${progressPercent}%`}}></div></div></div>;
 
   return (
-    <div className="pb-24 md:pb-8 max-w-4xl mx-auto w-full">
-      {showListSelector && <ListSelectionModal user={user} onSelect={onListSelectFinal} onCancel={() => navigate('/')} />}
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-900 pb-safe">
+      {showListSelector && <ListSelectionModal user={user} onSelect={(id, t) => { 
+          if(id) { navigate(`/editor/${id}?mode=${modeParam}`, { replace: true }); setShowListSelector(false); }
+          else if(t) { setTitle(t); setShowListSelector(false); if(modeParam === 'camera') setViewMode('scanner'); else setViewMode('detail'); }
+      }} onCancel={() => navigate('/')} />}
 
-      <input id="file-upload-trigger" type="file" className="hidden" accept="image/*,application/pdf" onChange={handleFileUpload} />
+      <input id="file-upload" type="file" className="hidden" accept="image/*,application/pdf" onChange={handleFileUpload} />
 
-      <header className="sticky top-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur z-20 py-4 border-b border-slate-200 dark:border-slate-800 mb-6 flex justify-between items-center px-4 -mx-4 shadow-sm">
+      {/* --- HEADER COMÚN --- */}
+      <header className="sticky top-0 z-20 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-800 px-4 py-3 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-2">
-           <button onClick={() => navigate('/')} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-slate-600 dark:text-slate-300"><ArrowLeft /></button>
-           <div className="flex flex-col">
-             <span className="text-xs text-slate-400 dark:text-slate-500 font-bold uppercase">
-               {viewMode === 'scanner' ? 'Modo Escáner' : 'Editor Manual'}
-             </span>
-             <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Título de la lista..." className="font-bold text-slate-800 dark:text-white bg-transparent focus:outline-none focus:border-b-2 border-brand-500 w-32 sm:w-auto placeholder:text-slate-300"/>
-           </div>
-        </div>
-        <div className="flex gap-2">
-             {viewMode === 'editor' && (
-               <Button variant="secondary" onClick={() => setViewMode('scanner')} className="p-2 rounded-full border-slate-200 dark:border-slate-700 dark:bg-slate-800" title="Volver a Escáner">
-                  <Camera size={20} className="text-slate-600 dark:text-slate-300"/>
-               </Button>
-             )}
-            <div className="flex flex-col items-center">
-                <span className="text-[10px] font-bold text-brand-600 dark:text-brand-400 uppercase tracking-wider mb-1">Guardar</span>
-                <Button onClick={handleSave} className="w-12 h-12 rounded-full p-0 flex items-center justify-center shadow-lg shadow-brand-200 dark:shadow-none bg-brand-600 hover:bg-brand-700">
-                  <Save size={20} />
-                </Button>
+            <button onClick={viewMode === 'list' ? handleExitOrSave : goBackFromDetail} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-slate-600 dark:text-slate-300">
+                <ArrowLeft size={24}/>
+            </button>
+            <div className="flex flex-col">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{viewMode === 'scanner' ? 'ESCANEAR' : 'EDITOR MANUAL'}</span>
+                <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Título..." className="bg-transparent font-bold text-slate-800 dark:text-white focus:outline-none w-32 md:w-64"/>
             </div>
+        </div>
+        
+        <div className="flex items-center gap-3">
+             {/* Botón Escanear/Subir (Solo visible en modo lista o scanner) */}
+             {viewMode !== 'detail' && (
+                 <div className="flex flex-col items-center">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 hidden md:block">{isMobile ? 'Escanear' : 'Subir PDF'}</span>
+                    <Button onClick={() => document.getElementById('file-upload')?.click()} className="w-10 h-10 md:w-auto md:h-10 md:px-4 rounded-xl p-0 flex items-center justify-center bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:text-white shadow-sm">
+                        {isMobile ? <Camera size={20}/> : <><Upload size={18} className="mr-2"/> Subir PDF</>}
+                    </Button>
+                 </div>
+             )}
+
+             {/* Botón Guardar */}
+             <div className="flex flex-col items-center">
+                <span className="text-[10px] font-bold text-brand-600 dark:text-brand-400 uppercase tracking-wider mb-1">Guardar</span>
+                <Button onClick={handleExitOrSave} className="w-10 h-10 rounded-xl p-0 flex items-center justify-center bg-brand-600 hover:bg-brand-700 text-white shadow-lg shadow-brand-500/30">
+                    <Save size={20}/>
+                </Button>
+             </div>
         </div>
       </header>
 
-      {/* --- VISTA ESCÁNER --- */}
-      {viewMode === 'scanner' && (
-        <div className="space-y-6">
-           <div className="bg-brand-50 dark:bg-slate-800 border border-brand-200 dark:border-slate-700 rounded-2xl p-8 text-center shadow-sm">
-              <div className="bg-white dark:bg-slate-700 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm">
-                  <Camera className="text-brand-500" size={36} />
-              </div>
-              <h3 className="font-bold text-xl text-slate-800 dark:text-white mb-2">Modo Escáner Activo</h3>
-              <p className="text-slate-600 dark:text-slate-300 mb-6 max-w-xs mx-auto">
-                 Haz fotos a tu libro o sube un PDF. El sistema extraerá las preguntas automáticamente.
-              </p>
-              <Button onClick={() => document.getElementById('file-upload-trigger')?.click()} className="w-full sm:w-auto px-8 py-3 text-lg flex items-center justify-center gap-2 shadow-lg shadow-brand-500/20">
-                 <Upload size={20} /> Abrir Cámara / Archivo
-              </Button>
-              <div className="mt-4">
-                <button onClick={addNewQuestionManual} className="text-sm text-brand-600 dark:text-brand-400 font-medium hover:underline">
-                  O añadir pregunta manual
-                </button>
-              </div>
-           </div>
-           {questions.length > 0 && (
-             <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
-                <div className="p-4 bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 font-bold text-slate-500 dark:text-slate-400 text-sm uppercase">
-                  Preguntas extraídas ({questions.length})
-                </div>
-                <div className="divide-y divide-slate-100 dark:divide-slate-700 max-h-[500px] overflow-y-auto">
-                  {questions.map((q, idx) => (
-                    <div key={q.id} onClick={() => editQuestionFromList(idx)} className="p-4 hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer flex gap-3 group transition-colors">
-                       <span className="font-bold text-slate-300 dark:text-slate-600 group-hover:text-brand-500">{idx + 1}.</span>
-                       <div className="flex-1">
-                          <p className="text-sm font-medium text-slate-800 dark:text-slate-200 line-clamp-2">{q.text}</p>
-                       </div>
-                       <ChevronRight size={16} className="text-slate-300 self-center"/>
+      <div className="max-w-4xl mx-auto p-4">
+        
+        {/* --- VISTA: LISTA DE PREGUNTAS --- */}
+        {viewMode === 'list' && (
+            <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                {/* PDF STATUS CARD */}
+                {(pdfState || resumeMetadata) && (
+                    <div className="bg-blue-50 dark:bg-slate-800 border border-blue-100 dark:border-slate-700 p-4 rounded-xl flex items-center justify-between shadow-sm">
+                        <div className="flex items-center gap-3">
+                            <BookOpen className="text-blue-500" size={24}/>
+                            <div>
+                                <p className="font-bold text-slate-700 dark:text-white text-sm">Escaneo PDF Activo</p>
+                                <p className="text-xs text-slate-500">Pág. {pdfState ? pdfState.lastProcessedPage : resumeMetadata?.lastProcessedPage}</p>
+                            </div>
+                        </div>
+                        {pdfState && pdfState.nextPage <= pdfState.totalPages && (
+                            <Button size="sm" onClick={() => document.getElementById('file-upload')?.click()} className="text-xs bg-blue-600">Continuar</Button>
+                        )}
                     </div>
-                  ))}
-                </div>
-             </div>
-           )}
-        </div>
-      )}
+                )}
 
-      {/* --- VISTA EDITOR MANUAL --- */}
-      {viewMode === 'editor' && (
-        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
-          <div className="flex justify-between items-center bg-white dark:bg-slate-800 p-2 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 mb-4">
-             <div className="flex gap-1">
-                 <Button variant="ghost" onClick={goToFirst} disabled={currentQIndex === 0} className="px-2 dark:text-slate-400 dark:hover:bg-slate-700">
-                   <ChevronsLeft size={20} />
-                 </Button>
-                 <Button variant="ghost" onClick={() => navigateQuestion('prev')} disabled={currentQIndex === 0} className="px-2 dark:text-slate-300 dark:hover:bg-slate-700">
-                   <ChevronLeft size={20} />
-                 </Button>
-             </div>
-             <button onClick={goToPagePrompt} className="font-mono font-bold text-slate-500 dark:text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 px-2 py-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
-               {displayIndex} <span className="text-slate-300 dark:text-slate-600">/</span> {displayTotal}
-             </button>
-             <div className="flex gap-1">
-                 <Button variant="ghost" onClick={() => navigateQuestion('next')} disabled={currentQIndex === questions.length} className="px-2 text-brand-600 dark:text-brand-400 dark:hover:bg-slate-700">
-                   <ChevronRight size={20} />
-                 </Button>
-                 <Button variant="secondary" onClick={addNewQuestionManual} className="px-2 ml-1 border-l border-slate-200 dark:border-slate-600 rounded-none rounded-r-lg" title="Nueva Pregunta">
-                    <Plus size={20} className="text-brand-600 dark:text-brand-400"/>
-                 </Button>
-             </div>
-          </div>
-  
-          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-md border border-slate-200 dark:border-slate-700 p-6 relative min-h-[400px]">
-              <div className="mb-6">
-                <label className="block text-xs uppercase text-slate-400 dark:text-slate-500 font-bold mb-2">Pregunta</label>
-                <TextArea value={activeQ.text} onChange={e => updateCurrentQuestion('text', e.target.value)} placeholder="Escribe la pregunta aquí..." className="text-lg bg-slate-50 dark:bg-slate-900 dark:text-white dark:border-slate-700 border-slate-200 min-h-[100px] focus:bg-white dark:focus:bg-slate-800 transition-colors"/>
-              </div>
-              <div className="space-y-3">
-                <label className="block text-xs uppercase text-slate-400 dark:text-slate-500 font-bold mb-2">Respuestas (Marca la correcta)</label>
-                {activeQ.options.map((opt, oIndex) => (
-                  <div key={opt.id} className="flex items-center gap-3 group">
-                    <button onClick={() => setCorrectOption(opt.id)} className={`flex-shrink-0 w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all ${activeQ.correctOptionId === opt.id ? 'border-green-500 bg-green-500 text-white shadow-md shadow-green-200 dark:shadow-none' : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-transparent hover:border-slate-400'}`}>
-                      <CheckCircle size={18} fill="currentColor" className={activeQ.correctOptionId === opt.id ? 'text-white' : ''} />
+                {/* ADD BUTTONS */}
+                <div className="grid grid-cols-2 gap-3 mb-6">
+                    <button onClick={() => { setCurrentQIndex(questions.length); setViewMode('detail'); }} className="p-4 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-600 text-slate-500 hover:border-brand-500 hover:text-brand-500 hover:bg-brand-50 dark:hover:bg-slate-800 transition-all flex flex-col items-center gap-2">
+                        <Plus size={24}/> <span className="font-medium">Añadir Manual</span>
                     </button>
-                    <div className="flex-1 relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-xs font-bold">{String.fromCharCode(65 + oIndex)}</span>
-                      <Input value={opt.text} onChange={e => updateOption(oIndex, e.target.value)} placeholder={`Opción ${oIndex + 1}`} className="pl-8 py-3 bg-slate-50 dark:bg-slate-900 dark:text-white dark:border-slate-700 border-slate-200 focus:bg-white dark:focus:bg-slate-800 transition-colors shadow-sm"/>
+                    <button onClick={() => document.getElementById('file-upload')?.click()} className="p-4 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-600 text-slate-500 hover:border-brand-500 hover:text-brand-500 hover:bg-brand-50 dark:hover:bg-slate-800 transition-all flex flex-col items-center gap-2">
+                        {isMobile ? <Camera size={24}/> : <Upload size={24}/>} <span className="font-medium">{isMobile ? 'Escanear' : 'Subir'}</span>
+                    </button>
+                </div>
+
+                {/* QUESTIONS LIST */}
+                <div className="space-y-2">
+                    {questions.map((q, idx) => {
+                        const validation = validateQuestion(q);
+                        const isInvalid = !validation.hasCorrect || validation.hasEmptyOption;
+                        
+                        return (
+                            <div key={q.id || idx} onClick={() => goToDetail(idx)} className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-100 dark:border-slate-700 shadow-sm flex items-center gap-4 cursor-pointer hover:border-brand-300 transition-colors">
+                                <span className="font-mono font-bold text-slate-300 dark:text-slate-600 text-lg w-8">{idx + 1}.</span>
+                                <div className="flex-1 min-w-0">
+                                    <p className="font-medium text-slate-800 dark:text-white truncate">{q.text || <span className="text-slate-400 italic">Sin texto...</span>}</p>
+                                    {isInvalid && (
+                                        <div className="flex items-center gap-1 text-xs text-amber-500 mt-1 font-medium">
+                                            <AlertTriangle size={12}/> Incompleta
+                                        </div>
+                                    )}
+                                </div>
+                                <ChevronRight size={18} className="text-slate-300"/>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+        )}
+
+        {/* --- VISTA: DETALLE (EDITOR REAL) --- */}
+        {viewMode === 'detail' && (
+            <div className="animate-in fade-in slide-in-from-right-4 duration-300 h-full">
+                {/* NAVIGATION BAR */}
+                <div className="flex justify-between items-center mb-4 bg-white dark:bg-slate-800 p-2 rounded-xl border border-slate-100 dark:border-slate-700 shadow-sm">
+                    <div className="flex gap-1">
+                        <Button variant="ghost" onClick={() => setCurrentQIndex(0)} disabled={currentQIndex === 0}><ChevronsLeft size={20}/></Button>
+                        <Button variant="ghost" onClick={() => setCurrentQIndex(prev => Math.max(0, prev - 1))} disabled={currentQIndex === 0}><ChevronLeft size={20}/></Button>
                     </div>
-                    <button onClick={() => { const newOptions = activeQ.options.filter((_, i) => i !== oIndex); updateCurrentQuestion('options', newOptions); }} className="text-slate-300 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <XCircle size={20} />
+                    
+                    <span className="font-mono font-bold text-slate-600 dark:text-slate-300">{currentQIndex + 1} / {questions.length > currentQIndex ? questions.length : currentQIndex + 1}</span>
+                    
+                    <div className="flex gap-1">
+                        <Button variant="ghost" onClick={() => setCurrentQIndex(prev => prev + 1)} disabled={currentQIndex >= questions.length}><ChevronRight size={20}/></Button>
+                        <Button variant="ghost" onClick={goToLastEdited} title="Ir a última editada" className="text-brand-600"><ChevronsRight size={20}/></Button>
+                    </div>
+                </div>
+
+                {/* EDIT CARD */}
+                <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-md border border-slate-100 dark:border-slate-700 p-6 relative">
+                    <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Pregunta</label>
+                    <TextArea 
+                        value={questions[currentQIndex]?.text || ''} 
+                        onChange={e => {
+                            const newQs = [...questions];
+                            if(!newQs[currentQIndex]) newQs[currentQIndex] = { id: generateId(), text: '', options: Array(4).fill(null).map(() => ({id: generateId(), text: ''})), correctOptionId: '' };
+                            newQs[currentQIndex].text = e.target.value;
+                            setQuestions(newQs);
+                        }}
+                        className="text-lg min-h-[120px] mb-6 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 dark:text-white"
+                        placeholder="Escribe la pregunta..."
+                    />
+
+                    <label className="block text-xs font-bold text-slate-400 uppercase mb-3">Respuestas (Toca el círculo para marcar correcta)</label>
+                    <div className="space-y-3">
+                        {(questions[currentQIndex]?.options || Array(4).fill(null).map(() => ({id: generateId(), text: ''}))).map((opt, oIdx) => (
+                            <div key={opt.id} className="flex items-center gap-3">
+                                <button 
+                                    onClick={() => {
+                                        const newQs = [...questions];
+                                        newQs[currentQIndex].correctOptionId = opt.id;
+                                        setQuestions(newQs);
+                                    }}
+                                    className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all flex-shrink-0 ${
+                                        questions[currentQIndex]?.correctOptionId === opt.id 
+                                        ? 'bg-green-500 border-green-500 text-white shadow-md shadow-green-200 dark:shadow-none' 
+                                        : 'border-slate-300 dark:border-slate-600 hover:border-slate-400'
+                                    }`}
+                                >
+                                    {questions[currentQIndex]?.correctOptionId === opt.id && <CheckCircle size={16} fill="currentColor"/>}
+                                </button>
+                                <div className="flex-1 relative">
+                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">{String.fromCharCode(65 + oIdx)}</span>
+                                    <Input 
+                                        value={opt.text}
+                                        onChange={e => {
+                                            const newQs = [...questions];
+                                            if(!newQs[currentQIndex]) return;
+                                            newQs[currentQIndex].options[oIdx].text = e.target.value;
+                                            setQuestions(newQs);
+                                        }}
+                                        className="pl-8 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 dark:text-white"
+                                    />
+                                </div>
+                                <button onClick={() => {
+                                     const newQs = [...questions];
+                                     newQs[currentQIndex].options.splice(oIdx, 1);
+                                     setQuestions(newQs);
+                                }} className="text-slate-300 hover:text-red-400"><XCircle size={20}/></button>
+                            </div>
+                        ))}
+                    </div>
+                    
+                    <button onClick={() => {
+                        const newQs = [...questions];
+                        if(!newQs[currentQIndex]) return;
+                        newQs[currentQIndex].options.push({ id: generateId(), text: '' });
+                        setQuestions(newQs);
+                    }} className="mt-4 flex items-center gap-2 text-sm font-medium text-brand-600 dark:text-brand-400 hover:bg-brand-50 dark:hover:bg-slate-700 px-3 py-2 rounded-lg transition-colors">
+                        <Plus size={16}/> Añadir otra opción
                     </button>
-                  </div>
-                ))}
-                <button onClick={() => { const newOpt = { id: generateId(), text: '' }; updateCurrentQuestion('options', [...activeQ.options, newOpt]); }} className="mt-2 text-sm font-medium text-brand-600 dark:text-brand-400 hover:text-brand-700 flex items-center gap-1 px-2 py-1 rounded hover:bg-brand-50 dark:hover:bg-slate-700 transition-colors w-fit">
-                  <Plus size={16}/> Añadir otra opción
-                </button>
-              </div>
-              {activeQ.id && currentQIndex < questions.length && (
-                 <div className="absolute top-4 right-4">
-                    <button onClick={() => { if(confirm("¿Borrar esta pregunta?")) { const newQs = questions.filter((_, i) => i !== currentQIndex); setQuestions(newQs); if(currentQIndex >= newQs.length) setCurrentQIndex(Math.max(0, newQs.length - 1)); } }} className="text-slate-300 hover:text-red-500 p-2 hover:bg-red-50 rounded-full"><Trash2 size={20}/></button>
-                 </div>
-              )}
-          </div>
-        </div>
-      )}
+                    
+                    <button onClick={() => {
+                        if(confirm("¿Borrar pregunta?")) {
+                            const newQs = questions.filter((_, i) => i !== currentQIndex);
+                            setQuestions(newQs);
+                            if(newQs.length === 0) setViewMode('list');
+                            else if(currentQIndex >= newQs.length) setCurrentQIndex(newQs.length - 1);
+                        }
+                    }} className="absolute top-4 right-4 text-slate-300 hover:text-red-500 p-2"><Trash2 size={20}/></button>
+                </div>
+            </div>
+        )}
+      </div>
     </div>
   );
 };
 
+// --- QUIZ PAGE (Refactored to filter invalid questions) ---
 const QuizPage = ({ user }: { user: User }) => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -831,42 +716,40 @@ const QuizPage = ({ user }: { user: User }) => {
       if (!id) return;
       const t = await storageService.getTestById(id);
       if (t) {
-        setTest(t);
+        // FILTER INVALID QUESTIONS
+        const validQuestions = t.questions.filter(q => 
+            q.text.trim().length > 0 && 
+            q.correctOptionId && 
+            q.options.every(o => o.text.trim().length > 0)
+        );
+        setTest({ ...t, questions: validQuestions });
       }
       setLoading(false);
     };
     loadTest();
   }, [id]);
 
-  const handleAnswer = (optionId: string) => {
-    setSelectedOptionId(optionId);
-  };
-
   const nextQuestion = async () => {
     if (!test || !selectedOptionId) return;
-
     const currentQuestion = test.questions[currentQuestionIndex];
     const isCorrect = selectedOptionId === currentQuestion.correctOptionId;
 
-    const answerDetail: AnswerDetail = {
+    const newAnswers = [...answers, {
       questionId: currentQuestion.id,
       questionText: currentQuestion.text,
       selectedOptionId: selectedOptionId,
       correctOptionId: currentQuestion.correctOptionId,
       options: currentQuestion.options,
       isCorrect
-    };
-
-    const newAnswers = [...answers, answerDetail];
+    }];
     setAnswers(newAnswers);
     setSelectedOptionId(null);
 
     if (currentQuestionIndex < test.questions.length - 1) {
       setCurrentQuestionIndex(prev => prev + 1);
     } else {
-      // Finish
       const score = newAnswers.filter(a => a.isCorrect).length;
-      const result: TestResult = {
+      await storageService.saveResult({
         id: generateId(),
         userId: user.uid,
         testId: test.id,
@@ -875,44 +758,34 @@ const QuizPage = ({ user }: { user: User }) => {
         score: Math.round((score / test.questions.length) * 10),
         totalQuestions: test.questions.length,
         details: newAnswers
-      };
-      
-      await storageService.saveResult(result);
+      });
       setShowResult(true);
     }
   };
 
   if (loading) return <div className="flex justify-center pt-20"><Loader2 className="animate-spin text-brand-500" /></div>;
-  if (!test) return <div className="text-center pt-20">Test no encontrado</div>;
+  if (!test || test.questions.length === 0) return <div className="p-8 text-center"><h2 className="text-xl font-bold mb-2">Oops...</h2><p>Este test no tiene preguntas válidas o completas.</p><Button onClick={() => navigate('/')} className="mt-4">Volver</Button></div>;
 
   if (showResult) {
     const score = answers.filter(a => a.isCorrect).length;
     return (
-      <div className="max-w-2xl mx-auto p-6 pb-24">
+      <div className="max-w-2xl mx-auto p-6 pb-24 animate-in zoom-in-95">
         <div className="bg-white dark:bg-slate-800 rounded-3xl p-8 text-center shadow-sm border border-slate-100 dark:border-slate-700 mb-6">
-           <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">Resultados</h2>
-           <div className="text-5xl font-black text-brand-600 dark:text-brand-400 mb-2">{score} / {test.questions.length}</div>
-           <p className="text-slate-500 dark:text-slate-400 mb-6">Puntuación: {Math.round((score / test.questions.length) * 10)}/10</p>
-           <Button onClick={() => navigate('/')} className="w-full">Volver al Inicio</Button>
+           <div className="text-6xl font-black text-brand-600 dark:text-brand-400 mb-2">{Math.round((score / test.questions.length) * 10)}</div>
+           <p className="text-slate-500 dark:text-slate-400 mb-6 font-medium uppercase tracking-wide">Puntuación Final</p>
+           <Button onClick={() => navigate('/')} className="w-full py-3 shadow-lg shadow-brand-500/20">Volver al Inicio</Button>
         </div>
         <div className="space-y-4">
           {answers.map((ans, idx) => (
-            <div key={idx} className={`bg-white dark:bg-slate-800 p-4 rounded-xl border ${ans.isCorrect ? 'border-green-200 dark:border-green-900' : 'border-red-200 dark:border-red-900'}`}>
-               <p className="font-medium text-slate-800 dark:text-white mb-2">{idx + 1}. {ans.questionText}</p>
+            <div key={idx} className={`bg-white dark:bg-slate-800 p-4 rounded-xl border-l-4 ${ans.isCorrect ? 'border-green-500' : 'border-red-500'} shadow-sm`}>
+               <p className="font-bold text-slate-800 dark:text-white mb-2">{idx + 1}. {ans.questionText}</p>
                {ans.options.map(opt => {
                  const isSelected = opt.id === ans.selectedOptionId;
                  const isCorrect = opt.id === ans.correctOptionId;
                  let bg = "bg-slate-50 dark:bg-slate-900";
-                 if (isCorrect) bg = "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300";
-                 else if (isSelected) bg = "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300";
-                 
-                 return (
-                   <div key={opt.id} className={`p-2 rounded mb-1 text-sm ${bg} flex justify-between`}>
-                     <span>{opt.text}</span>
-                     {isCorrect && <CheckCircle size={14}/>}
-                     {isSelected && !isCorrect && <XCircle size={14}/>}
-                   </div>
-                 )
+                 if (isCorrect) bg = "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 ring-1 ring-green-500";
+                 else if (isSelected) bg = "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 ring-1 ring-red-500";
+                 return <div key={opt.id} className={`p-3 rounded-lg mb-2 text-sm font-medium ${bg} flex justify-between`}><span>{opt.text}</span>{isCorrect && <CheckCircle size={16}/>}{isSelected && !isCorrect && <XCircle size={16}/>}</div>
                })}
             </div>
           ))}
@@ -924,70 +797,143 @@ const QuizPage = ({ user }: { user: User }) => {
   const question = test.questions[currentQuestionIndex];
 
   return (
-    <div className="max-w-xl mx-auto p-4 flex flex-col h-[calc(100vh-80px)]">
-      <header className="flex justify-between items-center mb-6">
+    <div className="max-w-xl mx-auto p-4 flex flex-col h-screen bg-white dark:bg-slate-900">
+      <div className="flex justify-between items-center py-4">
         <button onClick={() => navigate('/')} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full"><X size={24} className="text-slate-400"/></button>
-        <span className="font-bold text-slate-700 dark:text-slate-300">Pregunta {currentQuestionIndex + 1}/{test.questions.length}</span>
-        <div className="w-10"></div>
-      </header>
+        <div className="h-2 w-32 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden"><div className="h-full bg-brand-500 transition-all duration-300" style={{width: `${((currentQuestionIndex + 1) / test.questions.length) * 100}%`}}></div></div>
+        <span className="font-bold text-slate-400 text-sm">{currentQuestionIndex + 1}/{test.questions.length}</span>
+      </div>
 
-      <div className="flex-1 overflow-y-auto">
-        <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-6 leading-relaxed">{question.text}</h2>
+      <div className="flex-1 overflow-y-auto py-4">
+        <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-8 leading-relaxed">{question.text}</h2>
         <div className="space-y-3">
           {question.options.map(opt => (
             <button
               key={opt.id}
-              onClick={() => handleAnswer(opt.id)}
-              className={`w-full p-4 rounded-xl border-2 text-left transition-all ${selectedOptionId === opt.id ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20 dark:border-brand-500' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-brand-200 dark:hover:border-slate-600'}`}
+              onClick={() => setSelectedOptionId(opt.id)}
+              className={`w-full p-4 rounded-xl border-2 text-left transition-all duration-200 group relative ${selectedOptionId === opt.id ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20 dark:border-brand-500 shadow-md shadow-brand-100 dark:shadow-none' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-brand-200 dark:hover:border-slate-600'}`}
             >
-              <span className="text-slate-800 dark:text-slate-200">{opt.text}</span>
+              <span className={`font-medium ${selectedOptionId === opt.id ? 'text-brand-700 dark:text-brand-300' : 'text-slate-700 dark:text-slate-300'}`}>{opt.text}</span>
+              {selectedOptionId === opt.id && <div className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 bg-brand-500 rounded-full animate-in zoom-in duration-200"/>}
             </button>
           ))}
         </div>
       </div>
 
-      <div className="pt-4 mt-auto">
-        <Button onClick={nextQuestion} disabled={!selectedOptionId} className="w-full py-3 text-lg shadow-lg shadow-brand-200 dark:shadow-none">
-          {currentQuestionIndex === test.questions.length - 1 ? 'Terminar' : 'Siguiente'}
+      <div className="py-6">
+        <Button onClick={nextQuestion} disabled={!selectedOptionId} className="w-full py-4 text-lg shadow-xl shadow-brand-500/20 transition-all active:scale-95">
+          {currentQuestionIndex === test.questions.length - 1 ? 'Terminar Test' : 'Siguiente Pregunta'}
         </Button>
       </div>
     </div>
   );
 };
 
-const App = () => {
-  const { user, loading } = useAuth();
-  const { isDark } = useDarkMode();
+// --- SHARE PAGE ---
 
-  // MAGIC LINK DETECTION
+const SharePage = ({ user }: { user: User }) => {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const [test, setTest] = useState<Test | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
   useEffect(() => {
-      const searchParams = new URLSearchParams(window.location.search);
-      const key = searchParams.get('key');
-      if(key) {
-          localStorage.setItem('user_gemini_key', key);
-          // Limpiar URL
-          window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
-          alert("🔑 Clave Mágica detectada y guardada.\n\nLa app está lista para usarse.");
+    const load = async () => {
+      if (!id) return;
+      const t = await storageService.getTestById(id);
+      if (t) {
+        setTest(t);
+      } else {
+        setError('Test no encontrado');
       }
-  }, []);
+      setLoading(false);
+    };
+    load();
+  }, [id]);
 
-  if (loading) return <div className="h-screen w-screen flex items-center justify-center bg-white dark:bg-slate-900"><Loader2 className="animate-spin text-brand-600" size={40} /></div>;
+  const handleImport = async () => {
+    if (!id || !user) return;
+    setLoading(true);
+    try {
+      const newId = await storageService.copyTest(id, user.uid);
+      navigate(`/quiz/${newId}`); 
+    } catch (e: any) {
+      alert("Error al importar: " + e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) return <div className="flex justify-center pt-20"><Loader2 className="animate-spin text-brand-500" size={40} /></div>;
+  if (error || !test) return <div className="p-8 text-center"><h2 className="text-xl font-bold mb-2">Error</h2><p>{error || 'No encontrado'}</p><Button onClick={() => navigate('/')} className="mt-4">Volver</Button></div>;
 
   return (
-    <div className={`min-h-screen transition-colors duration-300 ${isDark ? 'dark bg-slate-900' : 'bg-slate-50'}`}>
-      <HashRouter>
-        <Routes>
-          <Route path="/login" element={!user ? <LoginPage /> : <Navigate to="/" />} />
-          <Route path="/share/:id" element={user ? <SharePage user={user} /> : <LoginPage />} />
-          <Route path="/" element={user ? <HomePage user={user} /> : <Navigate to="/login" />} />
-          <Route path="/editor" element={user ? <EditorPage user={user} /> : <Navigate to="/login" />} />
-          <Route path="/editor/:id" element={user ? <EditorPage user={user} /> : <Navigate to="/login" />} />
-          <Route path="/quiz/:id" element={user ? <QuizPage user={user} /> : <Navigate to="/login" />} />
-          <Route path="/settings" element={user ? <SettingsPage /> : <Navigate to="/login" />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </HashRouter>
+    <div className="max-w-md mx-auto p-6 pt-20 text-center animate-in fade-in zoom-in-95">
+       <div className="bg-white dark:bg-slate-800 rounded-3xl p-8 shadow-xl border border-slate-100 dark:border-slate-700">
+          <div className="w-20 h-20 bg-brand-100 dark:bg-slate-700 rounded-full flex items-center justify-center mx-auto mb-6">
+             <Download size={40} className="text-brand-600 dark:text-brand-400" />
+          </div>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">{test.title}</h1>
+          <p className="text-slate-500 dark:text-slate-400 mb-8">{test.questions.length} preguntas</p>
+          
+          <Button onClick={handleImport} className="w-full py-3 mb-3 shadow-lg shadow-brand-500/20">
+             Añadir a mis listas
+          </Button>
+          <Button variant="ghost" onClick={() => navigate('/')} className="w-full">Cancelar</Button>
+       </div>
     </div>
+  );
+};
+
+const LoginPage = () => {
+  const [errorMessage, setErrorMessage] = useState('');
+  const handleGoogleLogin = async () => {
+    try { setErrorMessage(''); await signInWithPopup(auth, googleProvider); } catch (err: any) { setErrorMessage(err.message); }
+  };
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center bg-slate-50 dark:bg-slate-900">
+      <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-xl max-w-sm w-full border border-slate-100 dark:border-slate-700">
+        <div className="bg-brand-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-brand-500/30">
+          <FileText className="text-white" size={32} />
+        </div>
+        <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">StudySnap</h1>
+        <p className="text-slate-500 dark:text-slate-400 mb-8">Tu estudio, simplificado con IA.</p>
+        <Button variant="primary" onClick={handleGoogleLogin} className="w-full flex items-center justify-center gap-3 py-3">
+          <span>Entrar con Google</span>
+        </Button>
+      </div>
+    </div>
+  );
+};
+
+// --- APP ROOT ---
+
+const App = () => {
+  const { user, loading } = useAuth();
+  useDarkMode(); // Init dark mode logic
+
+  if (loading) return <div className="flex items-center justify-center min-h-screen bg-slate-50 dark:bg-slate-900"><Loader2 className="animate-spin text-brand-600" size={32} /></div>;
+  if (!user) return <LoginPage />;
+
+  return (
+    <HashRouter>
+      <Layout onFabAction={(action) => {
+         const path = action === 'scan' ? '/editor?mode=camera' : '/editor?mode=manual';
+         // Navegación manual ya que el layout está fuera del router en props pero dentro en contexto
+         window.location.hash = path; 
+      }}>
+        <Routes>
+          <Route path="/" element={<HomePage user={user} />} />
+          <Route path="/editor" element={<EditorPage user={user} />} />
+          <Route path="/editor/:id" element={<EditorPage user={user} />} />
+          <Route path="/quiz/:id" element={<QuizPage user={user} />} />
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/share/:id" element={<SharePage user={user} />} />
+          <Route path="*" element={<Navigate to="/" />} />
+        </Routes>
+      </Layout>
+    </HashRouter>
   );
 };
 
