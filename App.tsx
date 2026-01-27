@@ -41,7 +41,8 @@ import {
   BookOpen,
   FileUp,
   Trophy,
-  Calendar
+  Calendar,
+  Image as ImageIcon
 } from 'lucide-react';
 import { signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { auth, googleProvider } from './services/firebaseConfig';
@@ -98,6 +99,47 @@ const useDarkMode = () => {
 };
 
 // --- Components ---
+
+// Modal de Confirmación Bonito
+const ConfirmationModal = ({ 
+    isOpen, 
+    title, 
+    message, 
+    onConfirm, 
+    onCancel, 
+    onDiscard 
+}: { 
+    isOpen: boolean; 
+    title: string; 
+    message: string; 
+    onConfirm: () => void; 
+    onCancel: () => void; 
+    onDiscard?: () => void; // Opción para "Salir sin guardar"
+}) => {
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl max-w-sm w-full p-6 border border-slate-100 dark:border-slate-700 transform scale-100 animate-in zoom-in-95">
+                <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">{title}</h3>
+                <p className="text-slate-500 dark:text-slate-400 mb-6 leading-relaxed">{message}</p>
+                <div className="flex flex-col gap-3">
+                    <Button onClick={onConfirm} className="w-full justify-center shadow-lg shadow-brand-500/20">
+                        Guardar y Salir
+                    </Button>
+                    {onDiscard && (
+                        <Button variant="danger" onClick={onDiscard} className="w-full justify-center">
+                            Salir sin guardar
+                        </Button>
+                    )}
+                    <Button variant="ghost" onClick={onCancel} className="w-full justify-center">
+                        Cancelar
+                    </Button>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 const ListSelectionModal = ({ user, onSelect, onCancel }: { user: User, onSelect: (testId: string | null, title?: string) => void, onCancel: () => void }) => {
   const [tests, setTests] = useState<Test[]>([]);
@@ -185,7 +227,7 @@ const SettingsPage = () => {
       
       <div className="text-center p-4">
           <Button variant="danger" onClick={() => signOut(auth)} className="w-full md:w-auto">Cerrar Sesión</Button>
-          <p className="text-center text-slate-400 text-xs mt-8">StudySnap v1.8 • Gemini Powered</p>
+          <p className="text-center text-slate-400 text-xs mt-8">StudySnap v1.9 • Gemini Powered</p>
       </div>
     </div>
   );
@@ -224,7 +266,6 @@ const HistoryPage = ({ user }: { user: User }) => {
 
     if (loading) return <div className="flex justify-center pt-20"><Loader2 className="animate-spin text-brand-500" size={40}/></div>;
 
-    // --- Detail View Overlay ---
     if (selectedResult) {
         return (
             <div className="fixed inset-0 bg-slate-50 dark:bg-slate-900 z-50 overflow-y-auto animate-in slide-in-from-bottom-5 duration-300 pb-20">
@@ -442,6 +483,7 @@ const EditorPage = ({ user }: { user: User }) => {
   const modeParam = searchParams.get('mode'); 
   const { id: editId } = useParams();
   const isMobile = useIsMobile();
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const [testId, setTestId] = useState<string | null>(editId || null);
   const [title, setTitle] = useState('');
@@ -455,6 +497,10 @@ const EditorPage = ({ user }: { user: User }) => {
   const [progressPercent, setProgressPercent] = useState(0); 
   const [showListSelector, setShowListSelector] = useState(false);
   
+  // Modal de guardado
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [pendingAction, setPendingAction] = useState<'exit' | null>(null);
+
   const [pdfState, setPdfState] = useState<PDFState | null>(null);
   const [resumeMetadata, setResumeMetadata] = useState<PDFProgress | null>(null);
 
@@ -464,6 +510,7 @@ const EditorPage = ({ user }: { user: User }) => {
         setIsLoading(true);
         const test = await storageService.getTestById(editId);
         if (test && test.userId === user.uid) {
+          setTestId(editId); // Asegurar que el ID es consistente
           setTitle(test.title);
           setQuestions(test.questions);
           if (test.pdfMetadata && test.pdfMetadata.lastProcessedPage < test.pdfMetadata.totalPages) {
@@ -483,8 +530,26 @@ const EditorPage = ({ user }: { user: User }) => {
     init();
   }, [editId, modeParam, user]);
 
+  // Manejar el botón "Atrás" del navegador y físico
+  useEffect(() => {
+      const handlePopState = (event: PopStateEvent) => {
+          // Prevenir navegación por defecto y mostrar modal
+          event.preventDefault();
+          window.history.pushState(null, '', window.location.href);
+          handleBackAttempt();
+      };
+
+      // Insertar un estado al montar para poder interceptar el "atrás"
+      window.history.pushState(null, '', window.location.href);
+      window.addEventListener('popstate', handlePopState);
+
+      return () => {
+          window.removeEventListener('popstate', handlePopState);
+      };
+  }, [questions, title]); // Dependencias para que la función tenga el estado actualizado
+
   const saveToStorage = async (qs: Question[], t: string, silent = false) => {
-      if(!testId && !t) return;
+      if(!t) return;
       const validQs = qs.filter(q => q.text.trim()); 
       
       let pdfMeta: PDFProgress | null = null; 
@@ -494,8 +559,11 @@ const EditorPage = ({ user }: { user: User }) => {
           pdfMeta = resumeMetadata;
       }
 
+      // CRÍTICO: Si editId existe, usamos ESE ID. Si no, usamos testId (si ya se generó) o generamos uno nuevo.
+      const finalId = editId || testId || generateId();
+
       const test: Test = {
-        id: testId || generateId(),
+        id: finalId, 
         userId: user.uid,
         title: t,
         createdAt: Date.now(),
@@ -506,7 +574,8 @@ const EditorPage = ({ user }: { user: User }) => {
       if(pdfMeta === null) delete test.pdfMetadata;
       else test.pdfMetadata = pdfMeta;
 
-      if(!testId) setTestId(test.id); 
+      if(!testId) setTestId(finalId); 
+      
       try {
         await storageService.saveTest(test);
         if(!silent) console.log("Guardado exitoso");
@@ -514,10 +583,8 @@ const EditorPage = ({ user }: { user: User }) => {
         console.error("Error guardando:", e);
         if(!silent) alert("Error al guardar en la nube");
       }
-      return test.id;
+      return finalId;
   };
-
-  const handleAutoSave = () => saveToStorage(questions, title, true);
 
   const validateQuestion = (q: Question) => {
       const hasText = q.text.trim().length > 0;
@@ -526,30 +593,32 @@ const EditorPage = ({ user }: { user: User }) => {
       return { hasText, hasCorrect, hasEmptyOption };
   };
 
-  const handleExitOrSave = async () => {
-     const invalidIndex = questions.findIndex(q => {
-         const v = validateQuestion(q);
-         return v.hasText && (!v.hasCorrect || v.hasEmptyOption);
-     });
+  // Función unificada para manejar la intención de salir
+  const handleBackAttempt = () => {
+      // Si estamos en detalle, volvemos a lista (sin preguntar, es navegación interna)
+      if (viewMode === 'detail') {
+          setViewMode('list');
+          return;
+      }
+      // Si estamos en lista o scanner, pedimos confirmación para salir
+      setPendingAction('exit');
+      setShowSaveModal(true);
+  };
 
-     if(invalidIndex !== -1) {
-         const confirmFix = confirm(
-             `La pregunta ${invalidIndex + 1} está incompleta.\n\n` +
-             `¿Quieres corregirla ahora? (Cancelar para salir y guardar, se ignorarán las incompletas)`
-         );
-         if(confirmFix) {
-             setCurrentQIndex(invalidIndex);
-             setViewMode('detail');
-             return;
-         }
-     }
+  const confirmSaveAndExit = async () => {
+      setShowSaveModal(false);
+      
+      if (!title.trim()) { alert("Ponle un título a la lista"); return; }
+      
+      setIsLoading(true);
+      await saveToStorage(questions, title);
+      navigate('/');
+      setIsLoading(false);
+  };
 
-     if (!title.trim()) { alert("Ponle un título a la lista"); return; }
-     
-     setIsLoading(true);
-     await saveToStorage(questions, title);
-     navigate('/');
-     setIsLoading(false);
+  const confirmDiscardAndExit = () => {
+      setShowSaveModal(false);
+      navigate('/');
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -588,6 +657,7 @@ const EditorPage = ({ user }: { user: User }) => {
 
         const updatedQuestions = [...questions, ...newQuestions];
         setQuestions(updatedQuestions);
+        // Guardado automático solo para no perder datos en caso de crash, pero no sale
         await saveToStorage(updatedQuestions, title, true);
         setViewMode('list'); 
 
@@ -607,11 +677,6 @@ const EditorPage = ({ user }: { user: User }) => {
       setCurrentQIndex(index);
       setLastEditedIndex(index);
       setViewMode('detail');
-  };
-
-  const goBackFromDetail = () => {
-      handleAutoSave();
-      setViewMode('list');
   };
 
   const goToLastEdited = () => {
@@ -644,17 +709,33 @@ const EditorPage = ({ user }: { user: User }) => {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 pb-safe">
+      <ConfirmationModal 
+          isOpen={showSaveModal}
+          title="¿Guardar cambios?"
+          message="Has realizado cambios en esta lista. ¿Quieres guardarlos antes de salir?"
+          onConfirm={confirmSaveAndExit}
+          onDiscard={confirmDiscardAndExit}
+          onCancel={() => setShowSaveModal(false)}
+      />
+
       {showListSelector && <ListSelectionModal user={user} onSelect={(id, t) => { 
           if(id) { navigate(`/editor/${id}?mode=${modeParam}`, { replace: true }); setShowListSelector(false); }
           else if(t) { setTitle(t); setShowListSelector(false); if(modeParam === 'camera') setViewMode('scanner'); else setViewMode('detail'); }
       }} onCancel={() => navigate('/')} />}
 
-      <input id="file-upload" type="file" className="hidden" accept="image/*,application/pdf" onChange={handleFileUpload} />
+      <input 
+          id="file-upload" 
+          type="file" 
+          ref={inputRef}
+          className="hidden" 
+          accept="image/*,application/pdf" // Excluye video
+          onChange={handleFileUpload} 
+      />
 
       {/* --- HEADER EDITOR --- */}
       <header className="sticky top-0 z-20 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-800 px-4 py-3 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-2">
-            <button onClick={viewMode === 'list' ? handleExitOrSave : goBackFromDetail} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-slate-600 dark:text-slate-300">
+            <button onClick={handleBackAttempt} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-slate-600 dark:text-slate-300">
                 <ArrowLeft size={24}/>
             </button>
             <div className="flex flex-col">
@@ -664,8 +745,9 @@ const EditorPage = ({ user }: { user: User }) => {
         </div>
         
         <div className="flex items-center gap-3">
-             {viewMode !== 'detail' && (
-                 <div className="flex flex-col items-center cursor-pointer" onClick={() => document.getElementById('file-upload')?.click()}>
+             {/* BOTÓN SUBIR PDF: Solo visible si NO hay editId (nuevo test) y NO estamos en detalle */}
+             {!editId && viewMode !== 'detail' && viewMode !== 'scanner' && (
+                 <div className="flex flex-col items-center cursor-pointer" onClick={() => inputRef.current?.click()}>
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 block">Subir PDF</span>
                     <Button className="w-10 h-10 md:w-auto md:h-10 md:px-4 rounded-xl flex items-center justify-center bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:text-white shadow-sm p-0 md:py-2">
                          <Upload size={18}/>
@@ -673,7 +755,7 @@ const EditorPage = ({ user }: { user: User }) => {
                  </div>
              )}
 
-             <div className="flex flex-col items-center cursor-pointer" onClick={handleExitOrSave}>
+             <div className="flex flex-col items-center cursor-pointer" onClick={() => setShowSaveModal(true)}>
                 <span className="text-[10px] font-bold text-brand-600 dark:text-brand-400 uppercase tracking-wider mb-1">Guardar</span>
                 <Button className="w-10 h-10 rounded-xl flex items-center justify-center bg-brand-600 hover:bg-brand-700 text-white shadow-lg shadow-brand-500/30 p-0">
                     <Save size={20} className="text-white" strokeWidth={2.5}/>
@@ -682,10 +764,32 @@ const EditorPage = ({ user }: { user: User }) => {
         </div>
       </header>
 
-      <div className="max-w-4xl mx-auto p-4">
+      <div className="max-w-4xl mx-auto p-4 h-[calc(100vh-80px)] overflow-y-auto">
         
-        {viewMode === 'list' && (
-            <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+        {/* --- VISTA: ESCÁNER INICIAL (GRANDE) --- */}
+        {viewMode === 'scanner' && questions.length === 0 && (
+             <div className="flex flex-col items-center justify-center h-full text-center space-y-8 animate-in zoom-in-95">
+                 <div className="bg-brand-50 dark:bg-slate-800 p-8 rounded-full shadow-inner">
+                    <Camera size={64} className="text-brand-600 dark:text-brand-400" />
+                 </div>
+                 <div>
+                    <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">Escanea tu Test</h2>
+                    <p className="text-slate-500 dark:text-slate-400 max-w-xs mx-auto">Toma una foto clara o sube un archivo PDF para generar preguntas automáticamente.</p>
+                 </div>
+                 
+                 <Button onClick={() => inputRef.current?.click()} className="px-8 py-4 rounded-full text-lg shadow-xl shadow-brand-500/30 hover:scale-105 transition-transform flex items-center gap-3">
+                     <ImageIcon size={24} /> <span>Abrir Cámara / Archivos</span>
+                 </Button>
+
+                 <Button variant="ghost" onClick={() => setViewMode('list')} className="text-sm">
+                     Cancelar y volver a la lista
+                 </Button>
+             </div>
+        )}
+
+        {/* --- VISTA: LISTA --- */}
+        {viewMode === 'list' && (viewMode !== 'scanner' || questions.length > 0) && (
+            <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300 pb-20">
                 {(pdfState || resumeMetadata) && (
                     <div className="bg-blue-50 dark:bg-slate-800 border border-blue-100 dark:border-slate-700 p-4 rounded-xl flex items-center justify-between shadow-sm">
                         <div className="flex items-center gap-3">
@@ -696,7 +800,7 @@ const EditorPage = ({ user }: { user: User }) => {
                             </div>
                         </div>
                         {pdfState && pdfState.nextPage <= pdfState.totalPages && (
-                            <Button size="sm" onClick={() => document.getElementById('file-upload')?.click()} className="text-xs bg-blue-600">Continuar</Button>
+                            <Button size="sm" onClick={() => inputRef.current?.click()} className="text-xs bg-blue-600">Continuar</Button>
                         )}
                     </div>
                 )}
@@ -705,7 +809,7 @@ const EditorPage = ({ user }: { user: User }) => {
                     <button onClick={() => { setCurrentQIndex(questions.length); setViewMode('detail'); }} className="p-4 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-600 text-slate-500 hover:border-brand-500 hover:text-brand-500 hover:bg-brand-50 dark:hover:bg-slate-800 transition-all flex flex-col items-center gap-2">
                         <Plus size={24}/> <span className="font-medium">Añadir Manual</span>
                     </button>
-                    <button onClick={() => document.getElementById('file-upload')?.click()} className="p-4 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-600 text-slate-500 hover:border-brand-500 hover:text-brand-500 hover:bg-brand-50 dark:hover:bg-slate-800 transition-all flex flex-col items-center gap-2">
+                    <button onClick={() => inputRef.current?.click()} className="p-4 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-600 text-slate-500 hover:border-brand-500 hover:text-brand-500 hover:bg-brand-50 dark:hover:bg-slate-800 transition-all flex flex-col items-center gap-2">
                         {isMobile ? <Camera size={24}/> : <Upload size={24}/>} <span className="font-medium">{isMobile ? 'Escanear' : 'Subir'}</span>
                     </button>
                 </div>
@@ -734,8 +838,9 @@ const EditorPage = ({ user }: { user: User }) => {
             </div>
         )}
 
+        {/* --- VISTA: DETALLE --- */}
         {viewMode === 'detail' && (
-            <div className="animate-in fade-in slide-in-from-right-4 duration-300 h-full">
+            <div className="animate-in fade-in slide-in-from-right-4 duration-300 h-full pb-20">
                 <div className="flex justify-between items-center mb-4 bg-white dark:bg-slate-800 p-2 rounded-xl border border-slate-100 dark:border-slate-700 shadow-sm">
                     <div className="flex gap-1">
                         <Button variant="ghost" onClick={() => setCurrentQIndex(prev => Math.max(0, prev - 1))} disabled={currentQIndex === 0} className="px-2"><ChevronLeft size={24}/></Button>
