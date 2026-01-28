@@ -46,7 +46,8 @@ import {
   Flag,
   PlusSquare,
   List,
-  Shuffle
+  Shuffle,
+  AlertCircle
 } from 'lucide-react';
 import { signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { auth, googleProvider } from './services/firebaseConfig';
@@ -108,6 +109,36 @@ const useDarkMode = () => {
 
 // --- Components ---
 
+// Modal de Error/Alerta
+const AlertModal = ({ 
+    isOpen, 
+    title = "Error", 
+    message, 
+    onClose 
+}: { 
+    isOpen: boolean; 
+    title?: string; 
+    message: string; 
+    onClose: () => void; 
+}) => {
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl max-w-sm w-full p-6 border border-slate-100 dark:border-slate-700 animate-in zoom-in-95">
+                <div className="flex items-center justify-center w-12 h-12 rounded-full bg-red-100 text-red-600 mb-4 mx-auto">
+                    <AlertCircle size={24} />
+                </div>
+                <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2 text-center">{title}</h3>
+                <p className="text-slate-500 dark:text-slate-400 mb-6 text-center leading-relaxed">{message}</p>
+                <Button onClick={onClose} className="w-full justify-center">
+                    Aceptar
+                </Button>
+            </div>
+        </div>
+    );
+};
+
 // Modal de Confirmación Genérico
 const ConfirmationModal = ({ 
     isOpen, 
@@ -117,7 +148,8 @@ const ConfirmationModal = ({
     confirmText = "Confirmar",
     onCancel, 
     onDiscard,
-    discardText = "Descartar"
+    discardText = "Descartar",
+    variant = "primary"
 }: { 
     isOpen: boolean; 
     title: string; 
@@ -127,6 +159,7 @@ const ConfirmationModal = ({
     onCancel: () => void; 
     onDiscard?: () => void;
     discardText?: string;
+    variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
 }) => {
     if (!isOpen) return null;
 
@@ -136,7 +169,7 @@ const ConfirmationModal = ({
                 <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">{title}</h3>
                 <p className="text-slate-500 dark:text-slate-400 mb-6 leading-relaxed">{message}</p>
                 <div className="flex flex-col gap-3">
-                    <Button onClick={onConfirm} className="w-full justify-center shadow-lg shadow-brand-500/20">
+                    <Button onClick={onConfirm} variant={variant} className="w-full justify-center shadow-lg shadow-brand-500/20">
                         {confirmText}
                     </Button>
                     {onDiscard && (
@@ -298,6 +331,8 @@ const HistoryPage = ({ user }: { user: User }) => {
     const [results, setResults] = useState<TestResult[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedResult, setSelectedResult] = useState<TestResult | null>(null);
+    const [deleteId, setDeleteId] = useState<string | null>(null);
+    const [deleteAllConfirm, setDeleteAllConfirm] = useState(false);
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -323,20 +358,18 @@ const HistoryPage = ({ user }: { user: User }) => {
         }
     }, [selectedResult]);
 
-    const handleDelete = async (e: React.MouseEvent, id: string) => {
-        e.stopPropagation();
-        if(confirm("¿Borrar este resultado?")) {
-            await storageService.deleteResult(id);
-            setResults(prev => prev.filter(r => r.id !== id));
-            if(selectedResult?.id === id) setSelectedResult(null);
-        }
+    const handleDelete = async () => {
+        if (!deleteId) return;
+        await storageService.deleteResult(deleteId);
+        setResults(prev => prev.filter(r => r.id !== deleteId));
+        if(selectedResult?.id === deleteId) setSelectedResult(null);
+        setDeleteId(null);
     }
 
     const handleDeleteAll = async () => {
-        if(confirm("¿ESTÁS SEGURO? Se borrará TODO tu historial de resultados.")) {
-            await storageService.deleteAllResults(user.uid);
-            setResults([]);
-        }
+        await storageService.deleteAllResults(user.uid);
+        setResults([]);
+        setDeleteAllConfirm(false);
     }
 
     const getPercentage = (score: number, total: number) => {
@@ -387,13 +420,33 @@ const HistoryPage = ({ user }: { user: User }) => {
 
     return (
         <div className="animate-in fade-in zoom-in-95 duration-300">
+             {/* Modales de confirmación */}
+             <ConfirmationModal 
+                isOpen={!!deleteId}
+                title="¿Borrar resultado?"
+                message="Esta acción no se puede deshacer."
+                confirmText="Borrar"
+                onConfirm={handleDelete}
+                onCancel={() => setDeleteId(null)}
+                variant="danger"
+             />
+             <ConfirmationModal 
+                isOpen={deleteAllConfirm}
+                title="¿Borrar TODO?"
+                message="Se eliminará todo tu historial de resultados permanentemente."
+                confirmText="Borrar Todo"
+                onConfirm={handleDeleteAll}
+                onCancel={() => setDeleteAllConfirm(false)}
+                variant="danger"
+             />
+
              <header className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-2">
                     <button onClick={() => navigate('/')} className="md:hidden p-2 hover:bg-white/50 rounded-full text-slate-700 dark:text-slate-300"><ArrowLeft /></button>
                     <h1 className="font-bold text-3xl text-slate-800 dark:text-white">Historial</h1>
                 </div>
                 {results.length > 0 && (
-                    <Button variant="danger" size="sm" onClick={handleDeleteAll} className="flex items-center gap-1">
+                    <Button variant="danger" size="sm" onClick={() => setDeleteAllConfirm(true)} className="flex items-center gap-1">
                         <Trash2 size={16}/> Borrar todo
                     </Button>
                 )}
@@ -426,7 +479,7 @@ const HistoryPage = ({ user }: { user: User }) => {
                                  </div>
                                  <div className="flex justify-between items-center pt-2 mt-auto">
                                      <span className="text-xs text-brand-600 dark:text-brand-400 font-medium opacity-0 group-hover:opacity-100 transition-opacity">Ver detalles</span>
-                                     <button onClick={(e) => handleDelete(e, res.id)} className="text-slate-400 hover:text-red-500 text-sm flex items-center gap-1 transition-colors z-10 p-1 hover:bg-red-50 rounded">
+                                     <button onClick={(e) => { e.stopPropagation(); setDeleteId(res.id); }} className="text-slate-400 hover:text-red-500 text-sm flex items-center gap-1 transition-colors z-10 p-1 hover:bg-red-50 rounded">
                                          <Trash2 size={16}/>
                                      </button>
                                  </div>
@@ -443,11 +496,11 @@ const HomePage = ({ user }: { user: User }) => {
   const [tests, setTests] = useState<Test[]>([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{msg: string, type: 'success'|'error'|'info'} | null>(null);
-  // Estado para las opciones de aleatoriedad (Guardado en localStorage para persistencia)
   const [randomSettings, setRandomSettings] = useState<{shuffleQ: boolean, shuffleA: boolean}>(() => {
       const saved = localStorage.getItem('randomSettings');
       return saved ? JSON.parse(saved) : { shuffleQ: false, shuffleA: false };
   });
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -472,12 +525,11 @@ const HomePage = ({ user }: { user: User }) => {
     setLoading(false);
   };
 
-  const handleDelete = async (e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
-    if (confirm('¿Quieres eliminar esta lista?')) {
-      await storageService.deleteTest(id);
-      setTests(prev => prev.filter(t => t.id !== id));
-    }
+  const handleDelete = async () => {
+    if (!deleteId) return;
+    await storageService.deleteTest(deleteId);
+    setTests(prev => prev.filter(t => t.id !== deleteId));
+    setDeleteId(null);
   };
   
   const handleShare = async (e: React.MouseEvent, id: string, title: string) => {
@@ -520,6 +572,17 @@ const HomePage = ({ user }: { user: User }) => {
     <div className="space-y-8 animate-in fade-in zoom-in-95 duration-300">
       {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
       
+      {/* Modal borrar lista */}
+      <ConfirmationModal
+         isOpen={!!deleteId}
+         title="¿Eliminar lista?"
+         message="Se perderán todas las preguntas de esta lista."
+         confirmText="Eliminar"
+         onConfirm={handleDelete}
+         onCancel={() => setDeleteId(null)}
+         variant="danger"
+      />
+
       <header className="flex justify-between items-center bg-white/80 dark:bg-slate-800/80 backdrop-blur-md p-6 rounded-2xl shadow-sm border border-white/50 dark:border-slate-700 md:hidden">
         <div className="flex items-center gap-4">
           <div className="bg-brand-100 dark:bg-slate-700 p-3 rounded-full border border-brand-200 dark:border-slate-600 shadow-sm">
@@ -571,7 +634,7 @@ const HomePage = ({ user }: { user: User }) => {
                     <button onClick={(e) => handleShare(e, test.id, test.title)} disabled={creatingLink} className="text-slate-400 hover:text-brand-600 dark:text-slate-500 dark:hover:text-brand-400 p-2 hover:bg-brand-50 dark:hover:bg-slate-700 rounded-lg transition-colors">
                       {creatingLink ? <Loader2 size={18} className="animate-spin"/> : <Share2 size={18} />}
                     </button>
-                    <button onClick={(e) => handleDelete(e, test.id)} className="text-slate-400 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400 p-2 hover:bg-red-50 dark:hover:bg-slate-700 rounded-lg transition-colors">
+                    <button onClick={(e) => {e.stopPropagation(); setDeleteId(test.id)}} className="text-slate-400 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400 p-2 hover:bg-red-50 dark:hover:bg-slate-700 rounded-lg transition-colors">
                       <Trash2 size={18} />
                     </button>
                   </div>
@@ -678,6 +741,12 @@ const EditorPage = ({ user }: { user: User }) => {
   const [processing, setProcessing] = useState(false);
   const [progress, setProgress] = useState({ msg: '', percent: 0 });
   
+  // States para Modales
+  const [errorModal, setErrorModal] = useState<{isOpen: boolean, msg: string}>({isOpen: false, msg: ''});
+  const [unsavedModalOpen, setUnsavedModalOpen] = useState(false);
+  const [deleteQId, setDeleteQId] = useState<string | null>(null);
+  const [toast, setToast] = useState<{msg: string, type: 'success'|'error'|'info'} | null>(null);
+  
   // Modos de vista: 'list' (resumen) o 'single' (edición paginada)
   const [viewMode, setViewMode] = useState<'list' | 'single'>('list');
   const [currentIndex, setCurrentIndex] = useState(0); 
@@ -694,7 +763,13 @@ const EditorPage = ({ user }: { user: User }) => {
                const newQ: Question = {
                   id: generateId(),
                   text: '',
-                  options: [{ id: generateId(), text: '' }, { id: generateId(), text: '' }],
+                  // AHORA CON 4 OPCIONES POR DEFECTO
+                  options: [
+                      { id: generateId(), text: '' },
+                      { id: generateId(), text: '' },
+                      { id: generateId(), text: '' },
+                      { id: generateId(), text: '' }
+                  ],
                   correctOptionId: ''
                };
                loadedTest = { ...t, questions: [...t.questions, newQ] };
@@ -740,20 +815,20 @@ const EditorPage = ({ user }: { user: User }) => {
       const validation = test ? validateTest(test) : { valid: true, errors: [] };
 
       if (hasChanges()) {
-          if (!window.confirm("Tienes cambios sin guardar. ¿Salir de todos modos?")) return;
+          setUnsavedModalOpen(true);
       } else if (!validation.valid) {
           // Si no hay cambios pero hay errores (ej: importado incompleto), avisar
           if (!window.confirm(`ATENCIÓN:\n\n${validation.errors.join('\n')}\n\n¿Salir de todos modos?`)) return;
+      } else {
+          navigate('/');
       }
-      
-      navigate('/');
   };
 
   const handleSave = async () => {
     if (!test) return;
     const validation = validateTest(test);
     if (!validation.valid) {
-        alert(`No se puede guardar:\n\n${validation.errors.join('\n')}`);
+        setErrorModal({isOpen: true, msg: `No se puede guardar:\n\n${validation.errors.join('\n')}`});
         return;
     }
 
@@ -771,39 +846,57 @@ const EditorPage = ({ user }: { user: User }) => {
     try {
       const reader = new FileReader();
       reader.onload = async (ev) => {
-         const base64 = (ev.target?.result as string).split(',')[1];
-         const questions = await parseFileToQuiz(base64, file.type, (msg, p) => setProgress({msg, percent: p}));
-         // Añadir preguntas
-         const newQs = [...test.questions, ...questions];
-         setTest(prev => prev ? ({ ...prev, questions: newQs }) : null);
-         // Permanecer en vista lista para ver lo importado
-         setViewMode('list');
+         try {
+             const base64 = (ev.target?.result as string).split(',')[1];
+             const questions = await parseFileToQuiz(base64, file.type, (msg, p) => setProgress({msg, percent: p}));
+             // Añadir preguntas
+             const newQs = [...test.questions, ...questions];
+             setTest(prev => prev ? ({ ...prev, questions: newQs }) : null);
+             
+             // AL FINALIZAR:
+             setProcessing(false);
+             setToast({msg: "¡Cargados!", type: 'success'});
+             // Ir al final de la lista para ver los nuevos
+             // Pequeño delay para que se renderice y el toast se vea
+             setTimeout(() => {
+                 window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+             }, 500);
+
+         } catch (err: any) {
+             setProcessing(false);
+             setErrorModal({isOpen: true, msg: err.message || "Error al procesar el archivo."});
+         }
       };
       reader.readAsDataURL(file);
     } catch (err: any) {
-        alert(err.message);
-    } finally {
         setProcessing(false);
+        setErrorModal({isOpen: true, msg: err.message});
+    } finally {
         if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
-  const deleteQuestion = (e: React.MouseEvent, qId: string) => {
-      e.stopPropagation();
-      if (!test) return;
-      if (confirm("¿Borrar pregunta?")) {
-        const newQs = test.questions.filter(q => q.id !== qId);
-        setTest({ ...test, questions: newQs });
-        // Si estábamos editando esta, salir a lista
-        if (viewMode === 'single') setViewMode('list');
-      }
+  const deleteQuestion = () => {
+      if (!test || !deleteQId) return;
+      const newQs = test.questions.filter(q => q.id !== deleteQId);
+      setTest({ ...test, questions: newQs });
+      setDeleteQId(null);
+      
+      // Si estábamos editando esta, salir a lista
+      if (viewMode === 'single') setViewMode('list');
   };
 
   const addQuestion = () => {
       const newQ: Question = {
           id: generateId(),
           text: '',
-          options: [{ id: generateId(), text: '' }, { id: generateId(), text: '' }],
+          // 4 OPCIONES POR DEFECTO
+          options: [
+              { id: generateId(), text: '' },
+              { id: generateId(), text: '' },
+              { id: generateId(), text: '' },
+              { id: generateId(), text: '' }
+          ],
           correctOptionId: ''
       };
       setTest(prev => prev ? ({ ...prev, questions: [...prev.questions, newQ] }) : null);
@@ -831,6 +924,54 @@ const EditorPage = ({ user }: { user: User }) => {
            onJump={(idx) => { setCurrentIndex(idx); setShowJumpModal(false); }} 
            onCancel={() => setShowJumpModal(false)} 
        />
+       {/* Modales */}
+       <AlertModal 
+            isOpen={errorModal.isOpen}
+            message={errorModal.msg}
+            onClose={() => setErrorModal({isOpen: false, msg: ''})}
+       />
+       <ConfirmationModal 
+            isOpen={unsavedModalOpen}
+            title="Cambios sin guardar"
+            message="Tienes cambios pendientes. ¿Quieres salir sin guardar?"
+            confirmText="Salir sin guardar"
+            onConfirm={() => { setUnsavedModalOpen(false); navigate('/'); }}
+            onCancel={() => setUnsavedModalOpen(false)}
+            onDiscard={() => { setUnsavedModalOpen(false); handleSave().then(() => navigate('/')); }}
+            discardText="Guardar y Salir"
+            variant="danger"
+       />
+       <ConfirmationModal 
+            isOpen={!!deleteQId}
+            title="¿Borrar pregunta?"
+            message="Esta pregunta se eliminará permanentemente de la lista."
+            confirmText="Borrar"
+            onConfirm={deleteQuestion}
+            onCancel={() => setDeleteQId(null)}
+            variant="danger"
+       />
+
+       {/* Toast */}
+       {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
+
+       {/* OVERLAY DE PROGRESO DE ESCANEO */}
+       {processing && (
+           <div className="fixed inset-0 z-[100] bg-slate-900/90 backdrop-blur-sm flex flex-col items-center justify-center p-8 animate-in fade-in duration-300">
+               <div className="w-full max-w-sm">
+                   <div className="flex justify-between text-white mb-2 font-bold">
+                       <span>{progress.msg}</span>
+                       <span>{progress.percent}%</span>
+                   </div>
+                   <div className="w-full h-4 bg-slate-700 rounded-full overflow-hidden shadow-inner">
+                       <div 
+                         className="h-full bg-brand-500 transition-all duration-300 ease-out shadow-[0_0_15px_rgba(99,102,241,0.5)]"
+                         style={{width: `${progress.percent}%`}}
+                       />
+                   </div>
+                   <p className="text-slate-400 text-sm mt-4 text-center">Por favor espera, la IA está analizando...</p>
+               </div>
+           </div>
+       )}
 
        {/* HEADER */}
        <header className="sticky top-0 bg-slate-50 dark:bg-slate-900 z-20 py-4 flex justify-between items-center mb-2 backdrop-blur-sm bg-opacity-90">
@@ -880,7 +1021,7 @@ const EditorPage = ({ user }: { user: User }) => {
                                        {!isValid && <span className="text-xs text-red-500 font-bold flex items-center gap-1 mt-1"><AlertTriangle size={12}/> Incompleta</span>}
                                    </div>
                                </div>
-                               <button onClick={(e) => deleteQuestion(e, q.id)} className="text-slate-300 hover:text-red-500 p-2 hover:bg-red-50 rounded-lg transition-colors">
+                               <button onClick={(e) => { e.stopPropagation(); setDeleteQId(q.id); }} className="text-slate-300 hover:text-red-500 p-2 hover:bg-red-50 rounded-lg transition-colors">
                                    <Trash2 size={18}/>
                                </button>
                            </div>
@@ -920,7 +1061,7 @@ const EditorPage = ({ user }: { user: User }) => {
                <Card className="relative group dark:bg-slate-800 dark:border-slate-700 min-h-[50vh] flex flex-col">
                    <div className="flex justify-between items-center mb-2">
                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Pregunta</span>
-                       <button onClick={(e) => deleteQuestion(e, currentQ.id)} className="text-slate-400 hover:text-red-500 p-2 hover:bg-red-50 rounded-lg"><Trash2 size={18}/></button>
+                       <button onClick={() => setDeleteQId(currentQ.id)} className="text-slate-400 hover:text-red-500 p-2 hover:bg-red-50 rounded-lg"><Trash2 size={18}/></button>
                    </div>
                    
                    <TextArea 
