@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { HashRouter, Routes, Route, useNavigate, useLocation, useParams, Navigate } from 'react-router-dom';
+import { HashRouter, Routes, Route, useNavigate, useLocation, useParams, Navigate, useSearchParams } from 'react-router-dom';
 import { 
   Home as HomeIcon, 
   Plus, 
@@ -45,7 +45,8 @@ import {
   Image as ImageIcon,
   Flag,
   PlusSquare,
-  List
+  List,
+  Shuffle
 } from 'lucide-react';
 import { signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { auth, googleProvider } from './services/firebaseConfig';
@@ -65,6 +66,10 @@ const useIsMobile = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
   return isMobile;
+};
+
+const shuffleArray = <T,>(array: T[]): T[] => {
+    return [...array].sort(() => Math.random() - 0.5);
 };
 
 // --- Auth Context ---
@@ -334,6 +339,11 @@ const HistoryPage = ({ user }: { user: User }) => {
         }
     }
 
+    const getPercentage = (score: number, total: number) => {
+        if (total === 0) return 0;
+        return Math.round((score / total) * 100);
+    }
+
     if (loading) return <div className="flex justify-center pt-20"><Loader2 className="animate-spin text-brand-500" size={40}/></div>;
 
     if (selectedResult) {
@@ -346,7 +356,7 @@ const HistoryPage = ({ user }: { user: User }) => {
                         <p className="text-xs text-slate-500">{new Date(selectedResult.date).toLocaleString()}</p>
                     </div>
                     <div className="ml-auto font-black text-xl text-brand-600 dark:text-brand-400">
-                        {selectedResult.score}/10
+                        {Math.round((selectedResult.score / 10) * 100)}%
                     </div>
                 </header>
                 <div className="p-4 max-w-2xl mx-auto space-y-4">
@@ -396,30 +406,33 @@ const HistoryPage = ({ user }: { user: User }) => {
                  </div>
              ) : (
                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                     {results.map(res => (
-                         <div key={res.id} onClick={() => setSelectedResult(res)} className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col gap-3 cursor-pointer hover:border-brand-300 transition-colors group">
-                             <div className="flex justify-between items-start">
-                                 <div className="flex-1 min-w-0 pr-2">
-                                     <h3 className="font-bold text-slate-800 dark:text-white text-lg truncate group-hover:text-brand-600 transition-colors">{res.testTitle}</h3>
-                                     <p className="text-xs text-slate-500 flex items-center gap-1 mt-1">
-                                         <Calendar size={12}/> {new Date(res.date).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}
-                                     </p>
+                     {results.map(res => {
+                         const percent = Math.round((res.score / 10) * 100); // Score is always out of 10
+                         return (
+                             <div key={res.id} onClick={() => setSelectedResult(res)} className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col gap-3 cursor-pointer hover:border-brand-300 transition-colors group">
+                                 <div className="flex justify-between items-start">
+                                     <div className="flex-1 min-w-0 pr-2">
+                                         <h3 className="font-bold text-slate-800 dark:text-white text-lg truncate group-hover:text-brand-600 transition-colors">{res.testTitle}</h3>
+                                         <p className="text-xs text-slate-500 flex items-center gap-1 mt-1">
+                                             <Calendar size={12}/> {new Date(res.date).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}
+                                         </p>
+                                     </div>
+                                     <div className={`px-3 py-1 rounded-lg font-bold text-sm flex-shrink-0 ${percent >= 50 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
+                                         {percent}%
+                                     </div>
                                  </div>
-                                 <div className={`px-3 py-1 rounded-lg font-bold text-sm flex-shrink-0 ${res.score >= 5 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
-                                     {res.score}/10
+                                 <div className="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-2 mt-2">
+                                     <div className={`h-2 rounded-full ${percent >= 50 ? 'bg-green-500' : 'bg-red-500'}`} style={{width: `${percent}%`}}></div>
+                                 </div>
+                                 <div className="flex justify-between items-center pt-2 mt-auto">
+                                     <span className="text-xs text-brand-600 dark:text-brand-400 font-medium opacity-0 group-hover:opacity-100 transition-opacity">Ver detalles</span>
+                                     <button onClick={(e) => handleDelete(e, res.id)} className="text-slate-400 hover:text-red-500 text-sm flex items-center gap-1 transition-colors z-10 p-1 hover:bg-red-50 rounded">
+                                         <Trash2 size={16}/>
+                                     </button>
                                  </div>
                              </div>
-                             <div className="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-2 mt-2">
-                                 <div className={`h-2 rounded-full ${res.score >= 5 ? 'bg-green-500' : 'bg-red-500'}`} style={{width: `${res.score * 10}%`}}></div>
-                             </div>
-                             <div className="flex justify-between items-center pt-2 mt-auto">
-                                 <span className="text-xs text-brand-600 dark:text-brand-400 font-medium opacity-0 group-hover:opacity-100 transition-opacity">Ver detalles</span>
-                                 <button onClick={(e) => handleDelete(e, res.id)} className="text-slate-400 hover:text-red-500 text-sm flex items-center gap-1 transition-colors z-10 p-1 hover:bg-red-50 rounded">
-                                     <Trash2 size={16}/>
-                                 </button>
-                             </div>
-                         </div>
-                     ))}
+                         )
+                     })}
                  </div>
              )}
         </div>
@@ -430,20 +443,27 @@ const HomePage = ({ user }: { user: User }) => {
   const [tests, setTests] = useState<Test[]>([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{msg: string, type: 'success'|'error'|'info'} | null>(null);
+  // Estado para las opciones de aleatoriedad (Guardado en localStorage para persistencia)
+  const [randomSettings, setRandomSettings] = useState<{shuffleQ: boolean, shuffleA: boolean}>(() => {
+      const saved = localStorage.getItem('randomSettings');
+      return saved ? JSON.parse(saved) : { shuffleQ: false, shuffleA: false };
+  });
+
   const navigate = useNavigate();
   const location = useLocation();
-  // Estado para bloquear clicks mientras se crea el enlace
   const [creatingLink, setCreatingLink] = useState(false);
 
   useEffect(() => {
     loadTests();
-    // Mostrar mensaje si venimos de importar
     if (location.state?.message) {
         setToast({ msg: location.state.message, type: 'success' });
-        // Limpiamos el state para que no salga al refrescar (opcional, pero limpio)
         window.history.replaceState({}, document.title);
     }
   }, [user, location]);
+
+  useEffect(() => {
+      localStorage.setItem('randomSettings', JSON.stringify(randomSettings));
+  }, [randomSettings]);
 
   const loadTests = async () => {
     setLoading(true);
@@ -466,11 +486,9 @@ const HomePage = ({ user }: { user: User }) => {
     setCreatingLink(true);
 
     try {
-        // 1. Crear copia pública en 'shares'
         const shareId = await storageService.createPublicShare(id);
         const url = `${window.location.origin}/#/share/${shareId}`;
 
-        // 2. Usar compartir nativo
         if (navigator.share) {
             await navigator.share({
                 title: 'StudySnap - ' + title,
@@ -478,7 +496,6 @@ const HomePage = ({ user }: { user: User }) => {
                 url: url
             });
         } else {
-            // Fallback
             await navigator.clipboard.writeText(url);
             setToast({ msg: "Enlace copiado al portapapeles", type: "success" });
         }
@@ -489,6 +506,15 @@ const HomePage = ({ user }: { user: User }) => {
         setCreatingLink(false);
     }
   }
+
+  const toggleRandom = (e: React.MouseEvent, type: 'Q' | 'A') => {
+      e.stopPropagation();
+      setRandomSettings(prev => ({
+          ...prev,
+          shuffleQ: type === 'Q' ? !prev.shuffleQ : prev.shuffleQ,
+          shuffleA: type === 'A' ? !prev.shuffleA : prev.shuffleA
+      }));
+  };
 
   return (
     <div className="space-y-8 animate-in fade-in zoom-in-95 duration-300">
@@ -554,9 +580,24 @@ const HomePage = ({ user }: { user: User }) => {
                 <div className="text-sm text-slate-500 dark:text-slate-400 mb-4 flex items-center gap-2">
                     <Badge color="blue">{test.questions.length} preguntas</Badge>
                 </div>
+                
+                {/* Opciones de aleatoriedad */}
+                <div className="flex gap-2 mt-4 flex-wrap">
+                    <button onClick={(e) => toggleRandom(e, 'Q')} className={`text-xs px-2 py-1 rounded-md border flex items-center gap-1 transition-colors ${randomSettings.shuffleQ ? 'bg-brand-100 border-brand-200 text-brand-700 dark:bg-brand-900/40 dark:border-brand-700 dark:text-brand-300' : 'bg-slate-50 border-slate-200 text-slate-500 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-400'}`}>
+                        Preguntas <Shuffle size={12}/>
+                    </button>
+                    <button onClick={(e) => toggleRandom(e, 'A')} className={`text-xs px-2 py-1 rounded-md border flex items-center gap-1 transition-colors ${randomSettings.shuffleA ? 'bg-brand-100 border-brand-200 text-brand-700 dark:bg-brand-900/40 dark:border-brand-700 dark:text-brand-300' : 'bg-slate-50 border-slate-200 text-slate-500 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-400'}`}>
+                        Respuestas <Shuffle size={12}/>
+                    </button>
+                </div>
+
               </div>
-              <div className="pt-4 border-t border-slate-100 dark:border-slate-700">
-                 <Button variant="primary" onClick={(e) => {e.stopPropagation(); navigate(`/quiz/${test.id}`)}} className="w-full text-sm py-2 flex justify-center items-center gap-2 shadow-md shadow-brand-200 dark:shadow-none">
+              <div className="pt-4 border-t border-slate-100 dark:border-slate-700 mt-4">
+                 <Button variant="primary" onClick={(e) => {
+                     e.stopPropagation(); 
+                     // Pasar settings via URL para que QuizPage las lea
+                     navigate(`/quiz/${test.id}?rndQ=${randomSettings.shuffleQ}&rndA=${randomSettings.shuffleA}`)
+                 }} className="w-full text-sm py-2 flex justify-center items-center gap-2 shadow-md shadow-brand-200 dark:shadow-none">
                    <Play size={16} /> Jugar
                  </Button>
               </div>
@@ -647,8 +688,23 @@ const EditorPage = ({ user }: { user: User }) => {
     if (!id) return;
     storageService.getTestById(id).then(t => {
        if (t && t.userId === user.uid) {
-           setTest(t);
-           setInitialTestJson(JSON.stringify(t));
+           let loadedTest = t;
+           // Auto-crear pregunta si venimos de modo manual
+           if (location.state?.autoCreateQuestion) {
+               const newQ: Question = {
+                  id: generateId(),
+                  text: '',
+                  options: [{ id: generateId(), text: '' }, { id: generateId(), text: '' }],
+                  correctOptionId: ''
+               };
+               loadedTest = { ...t, questions: [...t.questions, newQ] };
+               setCurrentIndex(t.questions.length); // Ir a la nueva
+               setViewMode('single'); // Entrar a editar
+           }
+
+           setTest(loadedTest);
+           setInitialTestJson(JSON.stringify(t)); // Base original es la guardada
+
            // Si venimos de "Escanear" desde el FAB, autodisparar input
            if (location.state?.autoTriggerScan) {
                setTimeout(() => fileInputRef.current?.click(), 500);
@@ -932,6 +988,7 @@ const EditorPage = ({ user }: { user: User }) => {
 const QuizPage = ({ user }: { user: User }) => {
     const { id } = useParams();
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
     const [test, setTest] = useState<Test | null>(null);
     const [answers, setAnswers] = useState<Record<string, string>>({});
     const [showResults, setShowResults] = useState(false);
@@ -942,15 +999,33 @@ const QuizPage = ({ user }: { user: User }) => {
     useEffect(() => {
         if (!id) return;
         storageService.getTestById(id).then(t => {
-           if (t) setTest(t);
+           if (t) {
+               // Aplicar aleatoriedad si se solicita
+               let processedTest = { ...t };
+               const rndQ = searchParams.get('rndQ') === 'true';
+               const rndA = searchParams.get('rndA') === 'true';
+
+               if (rndQ) {
+                   processedTest.questions = shuffleArray(processedTest.questions);
+               }
+               if (rndA) {
+                   processedTest.questions = processedTest.questions.map(q => ({
+                       ...q,
+                       options: shuffleArray(q.options)
+                   }));
+               }
+               setTest(processedTest);
+           }
            setLoading(false);
         });
     }, [id]);
 
     const handleAnswer = (optionId: string) => {
         if (!test) return;
-        setAnswers(prev => ({ ...prev, [test.questions[currentIndex].id]: optionId }));
-        // No pasar automáticamente, esperar al botón "Siguiente"
+        // Solo permitir responder si no se ha respondido aún (para feedback visual inmediato)
+        if (!answers[test.questions[currentIndex].id]) {
+            setAnswers(prev => ({ ...prev, [test.questions[currentIndex].id]: optionId }));
+        }
     };
 
     const handleNext = () => {
@@ -965,7 +1040,11 @@ const QuizPage = ({ user }: { user: User }) => {
     const finishQuiz = async () => {
         if (!test) return;
         let score = 0;
-        const details: AnswerDetail[] = test.questions.map(q => {
+        
+        // Calcular preguntas contestadas
+        const answeredQuestions = test.questions.filter(q => answers[q.id]);
+        
+        const details: AnswerDetail[] = answeredQuestions.map(q => {
             const isCorrect = answers[q.id] === q.correctOptionId;
             if (isCorrect) score++;
             return {
@@ -978,7 +1057,9 @@ const QuizPage = ({ user }: { user: User }) => {
             };
         });
 
-        const finalScore = test.questions.length > 0 ? Math.round((score / test.questions.length) * 10) : 0;
+        // La puntuación es sobre las contestadas, según petición
+        const totalAnswered = answeredQuestions.length;
+        const finalScore = totalAnswered > 0 ? Math.round((score / totalAnswered) * 10) : 0;
         
         const result: TestResult = {
             id: generateId(),
@@ -987,7 +1068,7 @@ const QuizPage = ({ user }: { user: User }) => {
             testTitle: test.title,
             date: Date.now(),
             score: finalScore,
-            totalQuestions: test.questions.length,
+            totalQuestions: totalAnswered, // Guardamos el total de las contestadas
             details
         };
 
@@ -1000,16 +1081,19 @@ const QuizPage = ({ user }: { user: User }) => {
 
     if (showResults) {
         const correctCount = Object.keys(answers).filter(k => answers[k] === test.questions.find(q => q.id === k)?.correctOptionId).length;
+        const totalAnswered = Object.keys(answers).length;
+        const percentage = totalAnswered > 0 ? Math.round((correctCount / totalAnswered) * 100) : 0;
+
         return (
             <div className="p-4 max-w-2xl mx-auto animate-in fade-in pt-20">
                 <div className="text-center mb-8">
                     <Trophy size={64} className="mx-auto text-yellow-500 mb-4"/>
                     <h2 className="text-3xl font-bold text-slate-800 dark:text-white">Resultado</h2>
                     <p className="text-xl text-slate-600 dark:text-slate-300 mt-2 mb-6">
-                        Has acertado {correctCount} de {test.questions.length}
+                        Has acertado {correctCount} de {totalAnswered} ({percentage}%)
                     </p>
                     <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-4 mb-8">
-                        <div className="bg-brand-500 h-4 rounded-full transition-all duration-1000" style={{width: `${(correctCount / test.questions.length) * 100}%`}}></div>
+                        <div className="bg-brand-500 h-4 rounded-full transition-all duration-1000" style={{width: `${percentage}%`}}></div>
                     </div>
                     <Button onClick={() => navigate('/')} className="px-8 shadow-xl">Volver al Inicio</Button>
                 </div>
@@ -1025,21 +1109,48 @@ const QuizPage = ({ user }: { user: User }) => {
         <div className="max-w-3xl mx-auto pb-20 animate-in slide-in-from-right-10 duration-300">
              <header className="mb-6 flex items-center justify-between sticky top-0 bg-slate-50 dark:bg-slate-900 z-10 py-4">
                  <button onClick={() => navigate('/')} className="flex items-center gap-2 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white"><ArrowLeft size={20}/> Salir</button>
-                 <span className="font-bold text-slate-800 dark:text-white">{currentIndex + 1} / {test.questions.length}</span>
+                 <div className="flex items-center gap-4">
+                     <span className="font-bold text-slate-800 dark:text-white">{currentIndex + 1} / {test.questions.length}</span>
+                     <Button size="sm" variant="danger" onClick={finishQuiz} className="text-xs">Terminar Test</Button>
+                 </div>
              </header>
              
              <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm min-h-[50vh] flex flex-col">
                  <h3 className="text-xl font-bold mb-6 text-slate-800 dark:text-white leading-relaxed">{currentQ.text}</h3>
                  <div className="grid gap-3 flex-1">
-                     {currentQ.options.map(opt => (
-                         <button 
-                            key={opt.id}
-                            onClick={() => handleAnswer(opt.id)}
-                            className={`p-4 rounded-xl text-left border-2 transition-all ${answers[currentQ.id] === opt.id ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20 text-brand-700 dark:text-brand-300 shadow-md transform scale-[1.02]' : 'border-slate-100 dark:border-slate-700 hover:border-brand-200 dark:hover:border-slate-600 text-slate-700 dark:text-slate-300'}`}
-                         >
-                             {opt.text}
-                         </button>
-                     ))}
+                     {currentQ.options.map(opt => {
+                         const isSelected = answers[currentQ.id] === opt.id;
+                         const isCorrect = opt.id === currentQ.correctOptionId;
+                         
+                         let style = 'border-slate-100 dark:border-slate-700 hover:border-brand-200 dark:hover:border-slate-600 text-slate-700 dark:text-slate-300';
+                         
+                         // Feedback inmediato
+                         if (hasAnswered) {
+                             if (isCorrect) {
+                                 style = 'bg-green-100 border-green-500 text-green-800 dark:bg-green-900/30 dark:text-green-300';
+                             } else if (isSelected) {
+                                 style = 'bg-red-100 border-red-500 text-red-800 dark:bg-red-900/30 dark:text-red-300';
+                             } else {
+                                 style = 'opacity-50 border-transparent';
+                             }
+                         } else if (isSelected) {
+                             // Selección provisional antes de confirmar (aunque ahora es inmediato)
+                             style = 'border-brand-500 bg-brand-50 dark:bg-brand-900/20 text-brand-700 dark:text-brand-300 shadow-md transform scale-[1.02]';
+                         }
+
+                         return (
+                             <button 
+                                key={opt.id}
+                                onClick={() => handleAnswer(opt.id)}
+                                disabled={hasAnswered}
+                                className={`p-4 rounded-xl text-left border-2 transition-all flex justify-between items-center ${style}`}
+                             >
+                                 <span>{opt.text}</span>
+                                 {hasAnswered && isCorrect && <CheckCircle className="text-green-600" size={20}/>}
+                                 {hasAnswered && isSelected && !isCorrect && <XCircle className="text-red-600" size={20}/>}
+                             </button>
+                         )
+                     })}
                  </div>
              </div>
 
@@ -1079,8 +1190,8 @@ const AppContent = () => {
     const { user, loading } = useAuth();
     useDarkMode(); // Init dark mode
     const [listModalOpen, setListModalOpen] = useState(false);
-    // Nuevo estado para controlar autodisparo
-    const [autoScanTrigger, setAutoScanTrigger] = useState(false); 
+    // Nuevo estado para controlar autodisparo o auto-creación
+    const [fabActionType, setFabActionType] = useState<'scan' | 'create'>('create');
     const navigate = useNavigate();
 
     if (loading) return <div className="h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900"><Loader2 className="animate-spin text-brand-600" size={48}/></div>;
@@ -1088,14 +1199,16 @@ const AppContent = () => {
     if (!user) return <LoginPage />;
 
     const handleFabAction = (action: 'scan' | 'create') => {
-        if (action === 'scan') setAutoScanTrigger(true);
-        else setAutoScanTrigger(false);
+        setFabActionType(action);
         setListModalOpen(true);
     };
 
     const handleListSelect = async (testId: string | null, title?: string) => {
         setListModalOpen(false);
-        const state = autoScanTrigger ? { autoTriggerScan: true } : {};
+        const state = {
+             autoTriggerScan: fabActionType === 'scan',
+             autoCreateQuestion: fabActionType === 'create'
+        };
         
         if (testId) {
             navigate(`/editor/${testId}`, { state });

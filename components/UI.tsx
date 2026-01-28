@@ -42,7 +42,8 @@ export const Badge: React.FC<{ children: React.ReactNode; color?: 'green' | 'red
   const colors = {
     green: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
     red: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
-    blue: "bg-blue-50 text-brand-600 dark:bg-brand-900/20 dark:text-brand-300",
+    // Corregido: azul más oscuro en dark mode para no deslumbrar
+    blue: "bg-blue-50 text-brand-600 dark:bg-slate-700 dark:text-brand-400 dark:border dark:border-slate-600",
     gray: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
   };
   return <span className={`px-2.5 py-1 rounded-md text-xs font-bold tracking-wide ${colors[color]}`}>{children}</span>;
