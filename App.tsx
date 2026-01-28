@@ -44,7 +44,8 @@ import {
   Calendar,
   Image as ImageIcon,
   Flag,
-  PlusSquare
+  PlusSquare,
+  List
 } from 'lucide-react';
 import { signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { auth, googleProvider } from './services/firebaseConfig';
@@ -624,17 +625,22 @@ const SharePage = ({ user }: { user: User }) => {
   );
 };
 
-// --- Editor Page (Paginada y Compacta) ---
+// --- Editor Page (Restaurado: Lista -> Detalle + Validaciones + PC Friendly) ---
 const EditorPage = ({ user }: { user: User }) => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [test, setTest] = useState<Test | null>(null);
+  const [initialTestJson, setInitialTestJson] = useState(''); // Para detectar cambios
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [progress, setProgress] = useState({ msg: '', percent: 0 });
-  const [currentIndex, setCurrentIndex] = useState(0); // Para paginación
-  const [showJumpModal, setShowJumpModal] = useState(false); // Modal de salto
+  
+  // Modos de vista: 'list' (resumen) o 'single' (edición paginada)
+  const [viewMode, setViewMode] = useState<'list' | 'single'>('list');
+  const [currentIndex, setCurrentIndex] = useState(0); 
+  const [showJumpModal, setShowJumpModal] = useState(false); 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -642,15 +648,10 @@ const EditorPage = ({ user }: { user: User }) => {
     storageService.getTestById(id).then(t => {
        if (t && t.userId === user.uid) {
            setTest(t);
-           // Si no hay preguntas, añadir una dummy para empezar
-           if(t.questions.length === 0) {
-               const dummy: Question = {
-                  id: generateId(),
-                  text: 'Nueva pregunta',
-                  options: [{ id: generateId(), text: 'Opción 1' }, { id: generateId(), text: 'Opción 2' }],
-                  correctOptionId: ''
-               };
-               setTest({...t, questions: [dummy]});
+           setInitialTestJson(JSON.stringify(t));
+           // Si venimos de "Escanear" desde el FAB, autodisparar input
+           if (location.state?.autoTriggerScan) {
+               setTimeout(() => fileInputRef.current?.click(), 500);
            }
        }
        else navigate('/'); 
@@ -658,10 +659,51 @@ const EditorPage = ({ user }: { user: User }) => {
     });
   }, [id, user]);
 
+  const hasChanges = () => {
+      if (!test) return false;
+      return JSON.stringify(test) !== initialTestJson;
+  };
+
+  const validateTest = (t: Test): { valid: boolean, errors: string[] } => {
+      const errors = [];
+      if (!t.title.trim()) errors.push("El test no tiene título.");
+      t.questions.forEach((q, idx) => {
+          if (!q.text.trim()) errors.push(`La pregunta ${idx + 1} está vacía.`);
+          if (!q.correctOptionId) errors.push(`La pregunta ${idx + 1} no tiene respuesta correcta marcada.`);
+          if (q.options.some(o => !o.text.trim())) errors.push(`La pregunta ${idx + 1} tiene opciones vacías.`);
+      });
+      return { valid: errors.length === 0, errors };
+  };
+
+  const handleBack = () => {
+      if (viewMode === 'single') {
+          setViewMode('list');
+          return;
+      }
+      
+      const validation = test ? validateTest(test) : { valid: true, errors: [] };
+
+      if (hasChanges()) {
+          if (!window.confirm("Tienes cambios sin guardar. ¿Salir de todos modos?")) return;
+      } else if (!validation.valid) {
+          // Si no hay cambios pero hay errores (ej: importado incompleto), avisar
+          if (!window.confirm(`ATENCIÓN:\n\n${validation.errors.join('\n')}\n\n¿Salir de todos modos?`)) return;
+      }
+      
+      navigate('/');
+  };
+
   const handleSave = async () => {
     if (!test) return;
+    const validation = validateTest(test);
+    if (!validation.valid) {
+        alert(`No se puede guardar:\n\n${validation.errors.join('\n')}`);
+        return;
+    }
+
     setSaving(true);
     await storageService.saveTest(test);
+    setInitialTestJson(JSON.stringify(test)); // Resetear estado sucio
     setSaving(false);
   };
 
@@ -675,11 +717,11 @@ const EditorPage = ({ user }: { user: User }) => {
       reader.onload = async (ev) => {
          const base64 = (ev.target?.result as string).split(',')[1];
          const questions = await parseFileToQuiz(base64, file.type, (msg, p) => setProgress({msg, percent: p}));
-         // Añadir preguntas al final y saltar a la primera nueva
+         // Añadir preguntas
          const newQs = [...test.questions, ...questions];
-         // Si la primera pregunta era dummy (vacía), reemplazarla si es posible
          setTest(prev => prev ? ({ ...prev, questions: newQs }) : null);
-         setCurrentIndex(test.questions.length); // Saltar a la primera importada
+         // Permanecer en vista lista para ver lo importado
+         setViewMode('list');
       };
       reader.readAsDataURL(file);
     } catch (err: any) {
@@ -690,48 +732,33 @@ const EditorPage = ({ user }: { user: User }) => {
     }
   };
 
-  const deleteCurrentQuestion = () => {
+  const deleteQuestion = (e: React.MouseEvent, qId: string) => {
+      e.stopPropagation();
       if (!test) return;
-      const newQs = test.questions.filter((_, idx) => idx !== currentIndex);
-      // Si borramos la última, ir a la anterior
-      let nextIndex = currentIndex;
-      if (nextIndex >= newQs.length) nextIndex = Math.max(0, newQs.length - 1);
-      
-      // Si nos quedamos sin preguntas, añadir una vacía
-      if (newQs.length === 0) {
-           const dummy: Question = {
-              id: generateId(),
-              text: '',
-              options: [{ id: generateId(), text: '' }, { id: generateId(), text: '' }],
-              correctOptionId: ''
-           };
-           newQs.push(dummy);
-           nextIndex = 0;
+      if (confirm("¿Borrar pregunta?")) {
+        const newQs = test.questions.filter(q => q.id !== qId);
+        setTest({ ...test, questions: newQs });
+        // Si estábamos editando esta, salir a lista
+        if (viewMode === 'single') setViewMode('list');
       }
-      
-      setTest({ ...test, questions: newQs });
-      setCurrentIndex(nextIndex);
   };
 
   const addQuestion = () => {
       const newQ: Question = {
           id: generateId(),
           text: '',
-          options: [
-              { id: generateId(), text: '' },
-              { id: generateId(), text: '' }
-          ],
+          options: [{ id: generateId(), text: '' }, { id: generateId(), text: '' }],
           correctOptionId: ''
       };
       setTest(prev => prev ? ({ ...prev, questions: [...prev.questions, newQ] }) : null);
-      setCurrentIndex(prev => (test ? test.questions.length : 0)); // Ir a la nueva (que estará al final)
+      // Ir directamente a editar la nueva
+      setCurrentIndex(test ? test.questions.length : 0);
+      setViewMode('single');
   };
 
-  const goToQuestion = (idx: number) => {
-      if (idx >= 0 && idx < (test?.questions.length || 0)) {
-          setCurrentIndex(idx);
-          setShowJumpModal(false);
-      }
+  const handleCardClick = (idx: number) => {
+      setCurrentIndex(idx);
+      setViewMode('single');
   };
 
   if (loading) return <div className="flex justify-center pt-20"><Loader2 className="animate-spin text-brand-600" size={40} /></div>;
@@ -741,169 +768,167 @@ const EditorPage = ({ user }: { user: User }) => {
   const totalQ = test.questions.length;
 
   return (
-    <div className="pb-20 animate-in fade-in zoom-in-95">
+    <div className="pb-32 animate-in fade-in zoom-in-95 max-w-2xl mx-auto">
        <JumpToQuestionModal 
            isOpen={showJumpModal} 
            totalQuestions={totalQ} 
-           onJump={goToQuestion} 
+           onJump={(idx) => { setCurrentIndex(idx); setShowJumpModal(false); }} 
            onCancel={() => setShowJumpModal(false)} 
        />
 
+       {/* HEADER */}
        <header className="sticky top-0 bg-slate-50 dark:bg-slate-900 z-20 py-4 flex justify-between items-center mb-2 backdrop-blur-sm bg-opacity-90">
-          <button onClick={() => navigate('/')} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full text-slate-700 dark:text-slate-300"><ArrowLeft /></button>
+          <button onClick={handleBack} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full text-slate-700 dark:text-slate-300">
+              <ArrowLeft />
+          </button>
           <div className="flex gap-2">
-             <input type="file" ref={fileInputRef} className="hidden" accept="image/*,.pdf" onChange={handleFileUpload} />
-             <Button variant="secondary" size="sm" onClick={() => fileInputRef.current?.click()} disabled={processing}>
-                {processing ? `${progress.percent}%` : <><Camera size={16} className="mr-2 inline"/> Escanear</>}
-             </Button>
-             <Button size="sm" onClick={handleSave} disabled={saving}>
-                {saving ? <Loader2 className="animate-spin" /> : <Save size={16} />}
+             <Button size="sm" onClick={handleSave} disabled={saving} className={hasChanges() ? 'animate-pulse' : ''}>
+                {saving ? <Loader2 className="animate-spin" /> : <Save size={16} />} 
+                <span className="ml-2 hidden sm:inline">{hasChanges() ? 'Guardar *' : 'Guardar'}</span>
              </Button>
           </div>
        </header>
-       
-       <div className="mb-4">
+
+       {/* Título editable */}
+       <div className="mb-6 px-2">
           <Input 
              value={test.title} 
              onChange={e => setTest({...test, title: e.target.value})} 
              className="text-2xl font-bold bg-transparent border-none px-0 focus:ring-0 text-slate-800 dark:text-white placeholder-slate-400" 
              placeholder="Título del test"
           />
+          <p className="text-slate-400 text-sm mt-1">{totalQ} preguntas</p>
        </div>
 
-       {/* --- NAVIGATION BAR COMPACTA --- */}
-       <div className="bg-white dark:bg-slate-800 p-2 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 mb-6 flex items-center justify-between gap-1 sticky top-16 z-10">
-           {/* Doble Izquierda: Inicio */}
-           <button 
-             onClick={() => setCurrentIndex(0)} 
-             disabled={currentIndex === 0}
-             className="w-9 h-9 flex items-center justify-center rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 transition-colors"
-           >
-             <ChevronsLeft size={20} />
-           </button>
-           
-           {/* Izquierda: Anterior */}
-           <button 
-             onClick={() => setCurrentIndex(Math.max(0, currentIndex - 1))} 
-             disabled={currentIndex === 0}
-             className="w-9 h-9 flex items-center justify-center rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 transition-colors"
-           >
-             <ChevronLeft size={20} />
-           </button>
+       {/* --- VISTA DE LISTA (RESUMEN) --- */}
+       {viewMode === 'list' && (
+           <div className="space-y-4">
+               {test.questions.length === 0 && (
+                   <div className="text-center py-10 text-slate-400 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-2xl">
+                       <FileText size={32} className="mx-auto mb-2 opacity-50"/>
+                       <p>Lista vacía. Añade o escanea preguntas.</p>
+                   </div>
+               )}
 
-           {/* Indicador Central (Botón para saltar) */}
-           <button 
-              onClick={() => setShowJumpModal(true)}
-              className="flex-1 text-center font-bold text-brand-600 dark:text-brand-400 bg-brand-50 dark:bg-slate-700/50 py-1.5 rounded-md text-sm mx-1 hover:bg-brand-100 dark:hover:bg-slate-700 transition-colors truncate"
-           >
-              {currentIndex + 1} / {totalQ}
-           </button>
-
-           {/* Derecha: Siguiente */}
-           <button 
-             onClick={() => setCurrentIndex(Math.min(totalQ - 1, currentIndex + 1))} 
-             disabled={currentIndex === totalQ - 1}
-             className="w-9 h-9 flex items-center justify-center rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 transition-colors"
-           >
-             <ChevronRight size={20} />
-           </button>
-
-           {/* Doble Derecha: Final */}
-           <button 
-             onClick={() => setCurrentIndex(totalQ - 1)} 
-             disabled={currentIndex === totalQ - 1}
-             className="w-9 h-9 flex items-center justify-center rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 transition-colors"
-           >
-             <ChevronsRight size={20} />
-           </button>
-
-            {/* Añadir (+) */}
-           <button 
-             onClick={addQuestion} 
-             className="w-9 h-9 flex items-center justify-center rounded-lg bg-brand-600 text-white shadow-md shadow-brand-200 dark:shadow-none hover:bg-brand-700 transition-colors ml-1"
-           >
-             <Plus size={20} />
-           </button>
-       </div>
-
-       {/* --- EDITOR DE PREGUNTA ACTUAL --- */}
-       {currentQ && (
-           <Card className="relative group dark:bg-slate-800 dark:border-slate-700 min-h-[50vh] flex flex-col">
-               <div className="flex justify-between items-center mb-2">
-                   <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Pregunta</span>
-                   <button onClick={deleteCurrentQuestion} className="text-slate-400 hover:text-red-500 p-2 hover:bg-red-50 dark:hover:bg-slate-700 rounded-lg transition-colors">
-                       <Trash2 size={18}/>
-                   </button>
-               </div>
-               
-               <TextArea 
-                  value={currentQ.text} 
-                  onChange={e => {
-                      const newQs = [...test.questions];
-                      newQs[currentIndex].text = e.target.value;
-                      setTest({...test, questions: newQs});
-                  }}
-                  className="w-full text-lg font-medium bg-slate-50 dark:bg-slate-900 border-none p-4 rounded-xl focus:ring-2 focus:ring-brand-500 mb-6 flex-1 min-h-[120px]"
-                  placeholder="Escribe la pregunta..."
-               />
-               
-               <div className="space-y-3">
-                   <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">Respuestas (Marca la correcta)</span>
-                   {currentQ.options.map((opt, oIdx) => (
-                       <div key={opt.id} className="flex items-center gap-2 group/opt">
-                           <button 
-                             onClick={() => {
-                                 const newQs = [...test.questions];
-                                 newQs[currentIndex].correctOptionId = opt.id;
-                                 setTest({...test, questions: newQs});
-                             }}
-                             className={`w-10 h-10 flex-shrink-0 flex items-center justify-center rounded-full border-2 transition-all ${currentQ.correctOptionId === opt.id ? 'bg-green-500 border-green-500 text-white shadow-md shadow-green-200 dark:shadow-none' : 'border-slate-300 text-transparent hover:border-brand-400 dark:border-slate-600'}`}
-                           >
-                               <CheckCircle size={20} fill="currentColor" className={currentQ.correctOptionId === opt.id ? 'opacity-100' : 'opacity-0 group-hover/opt:opacity-50'} />
-                           </button>
-                           
-                           <div className="flex-1 relative">
-                               <div className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 w-4">{String.fromCharCode(65 + oIdx)}</div>
-                               <Input 
-                                  value={opt.text}
-                                  onChange={e => {
-                                      const newQs = [...test.questions];
-                                      newQs[currentIndex].options[oIdx].text = e.target.value;
-                                      setTest({...test, questions: newQs});
-                                  }}
-                                  className="pl-8 py-3 text-sm w-full dark:bg-slate-700 dark:border-slate-600 dark:text-white"
-                                  placeholder={`Opción ${oIdx + 1}`}
-                               />
+               {test.questions.map((q, idx) => {
+                   const isValid = q.text.trim() && q.correctOptionId;
+                   return (
+                       <Card key={q.id} onClick={() => handleCardClick(idx)} className={`group relative cursor-pointer hover:border-brand-300 dark:bg-slate-800 dark:border-slate-700 ${!isValid ? 'border-red-300 bg-red-50 dark:bg-red-900/10' : ''}`}>
+                           <div className="flex justify-between items-start gap-4">
+                               <div className="flex items-start gap-3 flex-1 min-w-0">
+                                   <span className="font-bold text-brand-600 dark:text-brand-400 text-lg min-w-[24px]">{idx + 1}.</span>
+                                   <div className="flex-1">
+                                       <p className="font-medium text-slate-800 dark:text-slate-200 line-clamp-2">
+                                           {q.text || <span className="text-red-400 italic">Pregunta vacía</span>}
+                                       </p>
+                                       {!isValid && <span className="text-xs text-red-500 font-bold flex items-center gap-1 mt-1"><AlertTriangle size={12}/> Incompleta</span>}
+                                   </div>
+                               </div>
+                               <button onClick={(e) => deleteQuestion(e, q.id)} className="text-slate-300 hover:text-red-500 p-2 hover:bg-red-50 rounded-lg transition-colors">
+                                   <Trash2 size={18}/>
+                               </button>
                            </div>
+                       </Card>
+                   )
+               })}
 
-                           <button 
-                             onClick={() => {
-                                 const newQs = [...test.questions];
-                                 newQs[currentIndex].options = currentQ.options.filter(o => o.id !== opt.id);
-                                 setTest({...test, questions: newQs});
-                             }}
-                             className="w-8 h-8 flex items-center justify-center text-slate-300 hover:text-red-400 hover:bg-red-50 dark:hover:bg-slate-700 rounded-lg transition-colors"
-                           >
-                               <X size={18} />
-                           </button>
-                       </div>
-                   ))}
-                   
-                   <Button variant="ghost" size="sm" onClick={() => {
-                       const newQs = [...test.questions];
-                       newQs[currentIndex].options.push({id: generateId(), text: ''});
-                       setTest({...test, questions: newQs});
-                   }} className="w-full border-2 border-dashed border-slate-200 dark:border-slate-700 py-3 mt-2 hover:border-brand-300 text-slate-400 hover:text-brand-600">
-                       + Añadir otra opción
-                   </Button>
+               {/* Botones Fijos Abajo (Sticky) */}
+               <div className="fixed bottom-6 left-0 right-0 flex justify-center gap-4 px-4 pointer-events-none">
+                   <div className="flex gap-3 pointer-events-auto shadow-2xl rounded-full p-1 bg-white/90 dark:bg-slate-800/90 backdrop-blur border border-slate-200 dark:border-slate-700">
+                       <button onClick={addQuestion} className="flex items-center gap-2 px-5 py-3 bg-brand-600 text-white rounded-full font-bold hover:bg-brand-700 transition-colors">
+                           <PenTool size={18} /> Manual
+                       </button>
+                       <input type="file" ref={fileInputRef} className="hidden" accept="image/*,.pdf" onChange={handleFileUpload} />
+                       <button onClick={() => fileInputRef.current?.click()} disabled={processing} className="flex items-center gap-2 px-5 py-3 bg-slate-800 dark:bg-white text-white dark:text-slate-900 rounded-full font-bold hover:bg-slate-700 dark:hover:bg-slate-200 transition-colors">
+                           {processing ? <Loader2 className="animate-spin" size={18} /> : <Camera size={18} />} Escanear
+                       </button>
+                   </div>
                </div>
-           </Card>
+           </div>
+       )}
+
+       {/* --- VISTA DE EDICIÓN PAGINADA --- */}
+       {viewMode === 'single' && currentQ && (
+           <div className="animate-in slide-in-from-right-10 duration-200">
+                {/* NAVIGATION BAR COMPACTA */}
+               <div className="bg-white dark:bg-slate-800 p-2 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 mb-6 flex items-center justify-between gap-1 max-w-xl mx-auto">
+                   <button onClick={() => setCurrentIndex(0)} disabled={currentIndex === 0} className="w-9 h-9 flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 disabled:opacity-30"><ChevronsLeft size={20} /></button>
+                   <button onClick={() => setCurrentIndex(Math.max(0, currentIndex - 1))} disabled={currentIndex === 0} className="w-9 h-9 flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 disabled:opacity-30"><ChevronLeft size={20} /></button>
+                   <button onClick={() => setShowJumpModal(true)} className="flex-1 text-center font-bold text-brand-600 bg-brand-50 py-1.5 rounded-md text-sm mx-1 truncate">{currentIndex + 1} / {totalQ}</button>
+                   <button onClick={() => setCurrentIndex(Math.min(totalQ - 1, currentIndex + 1))} disabled={currentIndex === totalQ - 1} className="w-9 h-9 flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 disabled:opacity-30"><ChevronRight size={20} /></button>
+                   <button onClick={() => setCurrentIndex(totalQ - 1)} disabled={currentIndex === totalQ - 1} className="w-9 h-9 flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 disabled:opacity-30"><ChevronsRight size={20} /></button>
+                   <button onClick={addQuestion} className="w-9 h-9 flex items-center justify-center rounded-lg bg-brand-600 text-white shadow-md ml-1"><Plus size={20} /></button>
+               </div>
+
+               {/* EDITOR */}
+               <Card className="relative group dark:bg-slate-800 dark:border-slate-700 min-h-[50vh] flex flex-col">
+                   <div className="flex justify-between items-center mb-2">
+                       <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Pregunta</span>
+                       <button onClick={(e) => deleteQuestion(e, currentQ.id)} className="text-slate-400 hover:text-red-500 p-2 hover:bg-red-50 rounded-lg"><Trash2 size={18}/></button>
+                   </div>
+                   
+                   <TextArea 
+                      value={currentQ.text} 
+                      onChange={e => {
+                          const newQs = [...test.questions];
+                          newQs[currentIndex].text = e.target.value;
+                          setTest({...test, questions: newQs});
+                      }}
+                      className="w-full text-lg font-medium bg-slate-50 dark:bg-slate-900 border-none p-4 rounded-xl focus:ring-2 focus:ring-brand-500 mb-6 flex-1 min-h-[120px]"
+                      placeholder="Escribe la pregunta..."
+                   />
+                   
+                   <div className="space-y-3">
+                       <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">Respuestas (Marca la correcta)</span>
+                       {currentQ.options.map((opt, oIdx) => (
+                           <div key={opt.id} className="flex items-center gap-2 group/opt">
+                               <button 
+                                 onClick={() => {
+                                     const newQs = [...test.questions];
+                                     newQs[currentIndex].correctOptionId = opt.id;
+                                     setTest({...test, questions: newQs});
+                                 }}
+                                 className={`w-10 h-10 flex-shrink-0 flex items-center justify-center rounded-full border-2 transition-all ${currentQ.correctOptionId === opt.id ? 'bg-green-500 border-green-500 text-white shadow-md' : 'border-slate-300 text-transparent hover:border-brand-400 dark:border-slate-600'}`}
+                               >
+                                   <CheckCircle size={20} fill="currentColor" className={currentQ.correctOptionId === opt.id ? 'opacity-100' : 'opacity-0 group-hover/opt:opacity-50'} />
+                               </button>
+                               
+                               <div className="flex-1 relative">
+                                   <div className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 w-4">{String.fromCharCode(65 + oIdx)}</div>
+                                   <Input 
+                                      value={opt.text}
+                                      onChange={e => {
+                                          const newQs = [...test.questions];
+                                          newQs[currentIndex].options[oIdx].text = e.target.value;
+                                          setTest({...test, questions: newQs});
+                                      }}
+                                      className="pl-8 py-3 text-sm w-full dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                                      placeholder={`Opción ${oIdx + 1}`}
+                                   />
+                               </div>
+                               <button onClick={() => {
+                                     const newQs = [...test.questions];
+                                     newQs[currentIndex].options = currentQ.options.filter(o => o.id !== opt.id);
+                                     setTest({...test, questions: newQs});
+                                 }} className="w-8 h-8 flex items-center justify-center text-slate-300 hover:text-red-400 hover:bg-red-50 rounded-lg"><X size={18} /></button>
+                           </div>
+                       ))}
+                       <Button variant="ghost" size="sm" onClick={() => {
+                           const newQs = [...test.questions];
+                           newQs[currentIndex].options.push({id: generateId(), text: ''});
+                           setTest({...test, questions: newQs});
+                       }} className="w-full border-2 border-dashed border-slate-200 dark:border-slate-700 py-3 mt-2 hover:border-brand-300 text-slate-400 hover:text-brand-600">
+                           + Añadir otra opción
+                       </Button>
+                   </div>
+               </Card>
+           </div>
        )}
     </div>
   );
 };
 
-// --- Quiz Page (Reconstructed) ---
+// --- Quiz Page (Restaurado: Paso a paso) ---
 const QuizPage = ({ user }: { user: User }) => {
     const { id } = useParams();
     const navigate = useNavigate();
@@ -911,6 +936,8 @@ const QuizPage = ({ user }: { user: User }) => {
     const [answers, setAnswers] = useState<Record<string, string>>({});
     const [showResults, setShowResults] = useState(false);
     const [loading, setLoading] = useState(true);
+    // Nuevo: Control del índice actual
+    const [currentIndex, setCurrentIndex] = useState(0);
 
     useEffect(() => {
         if (!id) return;
@@ -920,7 +947,22 @@ const QuizPage = ({ user }: { user: User }) => {
         });
     }, [id]);
 
-    const handleSubmit = async () => {
+    const handleAnswer = (optionId: string) => {
+        if (!test) return;
+        setAnswers(prev => ({ ...prev, [test.questions[currentIndex].id]: optionId }));
+        // No pasar automáticamente, esperar al botón "Siguiente"
+    };
+
+    const handleNext = () => {
+        if (!test) return;
+        if (currentIndex < test.questions.length - 1) {
+            setCurrentIndex(prev => prev + 1);
+        } else {
+            finishQuiz();
+        }
+    };
+
+    const finishQuiz = async () => {
         if (!test) return;
         let score = 0;
         const details: AnswerDetail[] = test.questions.map(q => {
@@ -975,36 +1017,38 @@ const QuizPage = ({ user }: { user: User }) => {
         );
     }
 
+    const currentQ = test.questions[currentIndex];
+    const isLast = currentIndex === test.questions.length - 1;
+    const hasAnswered = !!answers[currentQ.id];
+
     return (
         <div className="max-w-3xl mx-auto pb-20 animate-in slide-in-from-right-10 duration-300">
              <header className="mb-6 flex items-center justify-between sticky top-0 bg-slate-50 dark:bg-slate-900 z-10 py-4">
                  <button onClick={() => navigate('/')} className="flex items-center gap-2 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white"><ArrowLeft size={20}/> Salir</button>
-                 <span className="font-bold text-slate-800 dark:text-white">{Object.keys(answers).length}/{test.questions.length} Respondidas</span>
+                 <span className="font-bold text-slate-800 dark:text-white">{currentIndex + 1} / {test.questions.length}</span>
              </header>
              
-             <div className="space-y-8">
-                 {test.questions.map((q, idx) => (
-                     <div key={q.id} className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
-                         <h3 className="text-lg font-bold mb-4 text-slate-800 dark:text-white"><span className="text-brand-600 mr-2">#{idx + 1}</span> {q.text}</h3>
-                         <div className="grid gap-3">
-                             {q.options.map(opt => (
-                                 <button 
-                                    key={opt.id}
-                                    onClick={() => setAnswers(prev => ({...prev, [q.id]: opt.id}))}
-                                    className={`p-4 rounded-xl text-left border-2 transition-all ${answers[q.id] === opt.id ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20 text-brand-700 dark:text-brand-300' : 'border-slate-100 dark:border-slate-700 hover:border-brand-200 dark:hover:border-slate-600 text-slate-700 dark:text-slate-300'}`}
-                                 >
-                                     {opt.text}
-                                 </button>
-                             ))}
-                         </div>
-                     </div>
-                 ))}
+             <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm min-h-[50vh] flex flex-col">
+                 <h3 className="text-xl font-bold mb-6 text-slate-800 dark:text-white leading-relaxed">{currentQ.text}</h3>
+                 <div className="grid gap-3 flex-1">
+                     {currentQ.options.map(opt => (
+                         <button 
+                            key={opt.id}
+                            onClick={() => handleAnswer(opt.id)}
+                            className={`p-4 rounded-xl text-left border-2 transition-all ${answers[currentQ.id] === opt.id ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20 text-brand-700 dark:text-brand-300 shadow-md transform scale-[1.02]' : 'border-slate-100 dark:border-slate-700 hover:border-brand-200 dark:hover:border-slate-600 text-slate-700 dark:text-slate-300'}`}
+                         >
+                             {opt.text}
+                         </button>
+                     ))}
+                 </div>
              </div>
 
              <div className="mt-8 flex justify-end sticky bottom-6">
-                 <Button onClick={handleSubmit} disabled={Object.keys(answers).length < test.questions.length} className="px-8 py-3 text-lg shadow-xl shadow-brand-500/20 w-full md:w-auto">
-                     Finalizar Test
-                 </Button>
+                 {hasAnswered && (
+                     <Button onClick={handleNext} className="px-8 py-3 text-lg shadow-xl shadow-brand-500/20 w-full md:w-auto flex items-center justify-center gap-2 animate-in fade-in slide-in-from-bottom-2">
+                         {isLast ? <>Finalizar Test <CheckCircle size={20}/></> : <>Siguiente Pregunta <ChevronRight size={20}/></>}
+                     </Button>
+                 )}
              </div>
         </div>
     );
@@ -1035,6 +1079,8 @@ const AppContent = () => {
     const { user, loading } = useAuth();
     useDarkMode(); // Init dark mode
     const [listModalOpen, setListModalOpen] = useState(false);
+    // Nuevo estado para controlar autodisparo
+    const [autoScanTrigger, setAutoScanTrigger] = useState(false); 
     const navigate = useNavigate();
 
     if (loading) return <div className="h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900"><Loader2 className="animate-spin text-brand-600" size={48}/></div>;
@@ -1042,16 +1088,18 @@ const AppContent = () => {
     if (!user) return <LoginPage />;
 
     const handleFabAction = (action: 'scan' | 'create') => {
-        // En ambos casos abrimos el modal para elegir/crear lista
+        if (action === 'scan') setAutoScanTrigger(true);
+        else setAutoScanTrigger(false);
         setListModalOpen(true);
     };
 
     const handleListSelect = async (testId: string | null, title?: string) => {
         setListModalOpen(false);
+        const state = autoScanTrigger ? { autoTriggerScan: true } : {};
+        
         if (testId) {
-            navigate(`/editor/${testId}`);
+            navigate(`/editor/${testId}`, { state });
         } else if (title) {
-            // Create new
             const newTest: Test = {
                 id: generateId(),
                 userId: user.uid,
@@ -1060,7 +1108,7 @@ const AppContent = () => {
                 questions: []
             };
             await storageService.saveTest(newTest);
-            navigate(`/editor/${newTest.id}`);
+            navigate(`/editor/${newTest.id}`, { state });
         }
     };
 
