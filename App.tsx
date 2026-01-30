@@ -47,7 +47,8 @@ import {
   PlusSquare,
   List,
   Shuffle,
-  AlertCircle
+  AlertCircle,
+  Check
 } from 'lucide-react';
 import { signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { auth, googleProvider } from './services/firebaseConfig';
@@ -109,6 +110,18 @@ const useDarkMode = () => {
 
 // --- Components ---
 
+// Overlay "¡Guardado!"
+const SavedOverlay = () => (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center pointer-events-none">
+        <div className="bg-slate-800/90 dark:bg-white/90 backdrop-blur-md text-white dark:text-slate-900 px-8 py-6 rounded-2xl shadow-2xl flex flex-col items-center gap-3 animate-in zoom-in-50 fade-in duration-300">
+            <div className="w-12 h-12 rounded-full bg-green-500 flex items-center justify-center">
+                <Check size={32} className="text-white" />
+            </div>
+            <span className="text-xl font-bold tracking-tight">¡Guardado!</span>
+        </div>
+    </div>
+);
+
 // Modal de Error/Alerta
 const AlertModal = ({ 
     isOpen, 
@@ -146,20 +159,24 @@ const ConfirmationModal = ({
     message, 
     onConfirm, 
     confirmText = "Confirmar",
+    confirmVariant = "primary",
     onCancel, 
     onDiscard,
     discardText = "Descartar",
-    variant = "primary"
+    discardVariant = "danger",
+    variant = "primary" // Fallback
 }: { 
     isOpen: boolean; 
     title: string; 
     message: string; 
     onConfirm: () => void; 
     confirmText?: string;
+    confirmVariant?: 'primary' | 'secondary' | 'danger' | 'success' | 'ghost';
     onCancel: () => void; 
     onDiscard?: () => void;
     discardText?: string;
-    variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
+    discardVariant?: 'primary' | 'secondary' | 'danger' | 'success' | 'ghost';
+    variant?: 'primary' | 'secondary' | 'danger' | 'success' | 'ghost';
 }) => {
     if (!isOpen) return null;
 
@@ -169,11 +186,11 @@ const ConfirmationModal = ({
                 <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">{title}</h3>
                 <p className="text-slate-500 dark:text-slate-400 mb-6 leading-relaxed">{message}</p>
                 <div className="flex flex-col gap-3">
-                    <Button onClick={onConfirm} variant={variant} className="w-full justify-center shadow-lg shadow-brand-500/20">
+                    <Button onClick={onConfirm} variant={confirmVariant} className="w-full justify-center">
                         {confirmText}
                     </Button>
                     {onDiscard && (
-                        <Button variant="danger" onClick={onDiscard} className="w-full justify-center">
+                        <Button variant={discardVariant} onClick={onDiscard} className="w-full justify-center">
                             {discardText}
                         </Button>
                     )}
@@ -426,18 +443,18 @@ const HistoryPage = ({ user }: { user: User }) => {
                 title="¿Borrar resultado?"
                 message="Esta acción no se puede deshacer."
                 confirmText="Borrar"
+                confirmVariant="danger"
                 onConfirm={handleDelete}
                 onCancel={() => setDeleteId(null)}
-                variant="danger"
              />
              <ConfirmationModal 
                 isOpen={deleteAllConfirm}
                 title="¿Borrar TODO?"
                 message="Se eliminará todo tu historial de resultados permanentemente."
                 confirmText="Borrar Todo"
+                confirmVariant="danger"
                 onConfirm={handleDeleteAll}
                 onCancel={() => setDeleteAllConfirm(false)}
-                variant="danger"
              />
 
              <header className="flex items-center justify-between mb-6">
@@ -578,9 +595,9 @@ const HomePage = ({ user }: { user: User }) => {
          title="¿Eliminar lista?"
          message="Se perderán todas las preguntas de esta lista."
          confirmText="Eliminar"
+         confirmVariant="danger"
          onConfirm={handleDelete}
          onCancel={() => setDeleteId(null)}
-         variant="danger"
       />
 
       <header className="flex justify-between items-center bg-white/80 dark:bg-slate-800/80 backdrop-blur-md p-6 rounded-2xl shadow-sm border border-white/50 dark:border-slate-700 md:hidden">
@@ -740,6 +757,7 @@ const EditorPage = ({ user }: { user: User }) => {
   const [saving, setSaving] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [progress, setProgress] = useState({ msg: '', percent: 0 });
+  const [showSavedOverlay, setShowSavedOverlay] = useState(false);
   
   // States para Modales
   const [errorModal, setErrorModal] = useState<{isOpen: boolean, msg: string}>({isOpen: false, msg: ''});
@@ -747,6 +765,9 @@ const EditorPage = ({ user }: { user: User }) => {
   const [deleteQId, setDeleteQId] = useState<string | null>(null);
   const [toast, setToast] = useState<{msg: string, type: 'success'|'error'|'info'} | null>(null);
   
+  // States para Validaciones al salir
+  const [validationModal, setValidationModal] = useState<{ type: 'empty' | 'correct' | null, index: number, isExiting: boolean }>({ type: null, index: -1, isExiting: false });
+
   // Modos de vista: 'list' (resumen) o 'single' (edición paginada)
   const [viewMode, setViewMode] = useState<'list' | 'single'>('list');
   const [currentIndex, setCurrentIndex] = useState(0); 
@@ -795,15 +816,29 @@ const EditorPage = ({ user }: { user: User }) => {
       return JSON.stringify(test) !== initialTestJson;
   };
 
-  const validateTest = (t: Test): { valid: boolean, errors: string[] } => {
-      const errors = [];
-      if (!t.title.trim()) errors.push("El test no tiene título.");
-      t.questions.forEach((q, idx) => {
-          if (!q.text.trim()) errors.push(`La pregunta ${idx + 1} está vacía.`);
-          if (!q.correctOptionId) errors.push(`La pregunta ${idx + 1} no tiene respuesta correcta marcada.`);
-          if (q.options.some(o => !o.text.trim())) errors.push(`La pregunta ${idx + 1} tiene opciones vacías.`);
-      });
-      return { valid: errors.length === 0, errors };
+  const checkValidationAndSave = async (skipEmptyCheck = false, skipCorrectCheck = false) => {
+      if (!test) return;
+      
+      // 1. Chequeo de opciones vacías
+      if (!skipEmptyCheck) {
+          const emptyOptionIndex = test.questions.findIndex(q => q.options.some(o => !o.text.trim()));
+          if (emptyOptionIndex !== -1) {
+              setValidationModal({ type: 'empty', index: emptyOptionIndex, isExiting: true });
+              return; // Detenemos guardado
+          }
+      }
+
+      // 2. Chequeo de respuesta correcta no marcada
+      if (!skipCorrectCheck) {
+          const noCorrectIndex = test.questions.findIndex(q => !q.correctOptionId);
+          if (noCorrectIndex !== -1) {
+              setValidationModal({ type: 'correct', index: noCorrectIndex, isExiting: true });
+              return; // Detenemos guardado
+          }
+      }
+
+      // Si pasa todo, guardamos y salimos
+      await performSave(true);
   };
 
   const handleBack = () => {
@@ -812,30 +847,35 @@ const EditorPage = ({ user }: { user: User }) => {
           return;
       }
       
-      const validation = test ? validateTest(test) : { valid: true, errors: [] };
-
       if (hasChanges()) {
           setUnsavedModalOpen(true);
-      } else if (!validation.valid) {
-          // Si no hay cambios pero hay errores (ej: importado incompleto), avisar
-          if (!window.confirm(`ATENCIÓN:\n\n${validation.errors.join('\n')}\n\n¿Salir de todos modos?`)) return;
       } else {
           navigate('/');
       }
   };
 
-  const handleSave = async () => {
-    if (!test) return;
-    const validation = validateTest(test);
-    if (!validation.valid) {
-        setErrorModal({isOpen: true, msg: `No se puede guardar:\n\n${validation.errors.join('\n')}`});
-        return;
-    }
+  const performSave = async (shouldExit = false) => {
+      if (!test) return;
+      if (!test.title.trim()) {
+          setErrorModal({isOpen: true, msg: "El test no tiene título."});
+          return;
+      }
 
-    setSaving(true);
-    await storageService.saveTest(test);
-    setInitialTestJson(JSON.stringify(test)); // Resetear estado sucio
-    setSaving(false);
+      setSaving(true);
+      await storageService.saveTest(test);
+      setInitialTestJson(JSON.stringify(test));
+      setSaving(false);
+      
+      setShowSavedOverlay(true);
+      setTimeout(() => {
+          setShowSavedOverlay(false);
+          if (shouldExit) navigate('/');
+      }, 1500);
+  };
+
+  const handleManualSave = () => {
+      // Guardado manual simple (sin validaciones bloqueantes de salida, solo feedback visual)
+      performSave(false); 
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -930,29 +970,77 @@ const EditorPage = ({ user }: { user: User }) => {
             message={errorModal.msg}
             onClose={() => setErrorModal({isOpen: false, msg: ''})}
        />
+       {/* Modal "Cambios sin guardar" al salir */}
        <ConfirmationModal 
             isOpen={unsavedModalOpen}
             title="Cambios sin guardar"
-            message="Tienes cambios pendientes. ¿Quieres salir sin guardar?"
-            confirmText="Salir sin guardar"
-            onConfirm={() => { setUnsavedModalOpen(false); navigate('/'); }}
+            message="Tienes cambios pendientes. ¿Qué deseas hacer?"
+            confirmText="Guardar y Salir"
+            confirmVariant="success"
+            onConfirm={() => { setUnsavedModalOpen(false); checkValidationAndSave(); }}
+            discardText="Salir sin guardar"
+            discardVariant="danger"
+            onDiscard={() => { setUnsavedModalOpen(false); navigate('/'); }}
             onCancel={() => setUnsavedModalOpen(false)}
-            onDiscard={() => { setUnsavedModalOpen(false); handleSave().then(() => navigate('/')); }}
-            discardText="Guardar y Salir"
-            variant="danger"
        />
+       
+       {/* Validación 1: Respuesta Vacía */}
+       <ConfirmationModal 
+            isOpen={validationModal.type === 'empty'}
+            title="Respuesta vacía"
+            message="Hay una pregunta con una respuesta vacía. Si no la rellenas, no aparecerá en los test. ¿Quieres rellenarla ahora?"
+            confirmText="Sí, ir a la pregunta"
+            confirmVariant="primary"
+            onConfirm={() => {
+                const idx = validationModal.index;
+                setValidationModal({ ...validationModal, type: null });
+                setCurrentIndex(idx);
+                setViewMode('single');
+            }}
+            discardText="No, guardar así"
+            discardVariant="secondary"
+            onDiscard={() => {
+                setValidationModal({ ...validationModal, type: null });
+                checkValidationAndSave(true, false); // Saltar chequeo de vacías
+            }}
+            onCancel={() => {}} // No hay cancel, es flujo bloqueante
+       />
+
+       {/* Validación 2: Sin respuesta correcta */}
+       <ConfirmationModal 
+            isOpen={validationModal.type === 'correct'}
+            title="Sin respuesta correcta"
+            message="No está marcada la respuesta correcta de una pregunta. Si no lo haces, esa pregunta no aparecerá en los test. ¿Quieres seleccionarla ahora?"
+            confirmText="Sí, ir a marcarla"
+            confirmVariant="primary"
+            onConfirm={() => {
+                const idx = validationModal.index;
+                setValidationModal({ ...validationModal, type: null });
+                setCurrentIndex(idx);
+                setViewMode('single');
+            }}
+            discardText="No, guardar así"
+            discardVariant="secondary"
+            onDiscard={() => {
+                setValidationModal({ ...validationModal, type: null });
+                checkValidationAndSave(true, true); // Saltar ambos chequeos
+            }}
+            onCancel={() => {}} 
+       />
+
        <ConfirmationModal 
             isOpen={!!deleteQId}
             title="¿Borrar pregunta?"
             message="Esta pregunta se eliminará permanentemente de la lista."
             confirmText="Borrar"
+            confirmVariant="danger"
             onConfirm={deleteQuestion}
             onCancel={() => setDeleteQId(null)}
-            variant="danger"
        />
 
-       {/* Toast */}
+       {/* Toast y Overlay */}
        {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
+       {showSavedOverlay && <SavedOverlay />}
 
        {/* OVERLAY DE PROGRESO DE ESCANEO */}
        {processing && (
@@ -979,7 +1067,7 @@ const EditorPage = ({ user }: { user: User }) => {
               <ArrowLeft />
           </button>
           <div className="flex gap-2">
-             <Button size="sm" onClick={handleSave} disabled={saving} className={hasChanges() ? 'animate-pulse' : ''}>
+             <Button size="sm" onClick={handleManualSave} disabled={saving} className={hasChanges() ? 'animate-pulse' : ''}>
                 {saving ? <Loader2 className="animate-spin" /> : <Save size={16} />} 
                 <span className="ml-2 hidden sm:inline">{hasChanges() ? 'Guardar *' : 'Guardar'}</span>
              </Button>
