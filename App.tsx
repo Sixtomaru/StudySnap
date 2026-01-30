@@ -854,14 +854,14 @@ const EditorPage = ({ user }: { user: User }) => {
       return JSON.stringify(test) !== initialTestJson;
   };
 
-  const checkValidationAndSave = async (skipEmptyCheck = false, skipCorrectCheck = false) => {
+  const checkValidationAndSave = async (shouldExit: boolean, skipEmptyCheck = false, skipCorrectCheck = false) => {
       if (!test) return;
       
       // 1. Chequeo de opciones vacías
       if (!skipEmptyCheck) {
           const emptyOptionIndex = test.questions.findIndex(q => q.options.some(o => !o.text.trim()));
           if (emptyOptionIndex !== -1) {
-              setValidationModal({ type: 'empty', index: emptyOptionIndex, isExiting: true });
+              setValidationModal({ type: 'empty', index: emptyOptionIndex, isExiting: shouldExit });
               return; // Detenemos guardado
           }
       }
@@ -870,13 +870,13 @@ const EditorPage = ({ user }: { user: User }) => {
       if (!skipCorrectCheck) {
           const noCorrectIndex = test.questions.findIndex(q => !q.correctOptionId);
           if (noCorrectIndex !== -1) {
-              setValidationModal({ type: 'correct', index: noCorrectIndex, isExiting: true });
+              setValidationModal({ type: 'correct', index: noCorrectIndex, isExiting: shouldExit });
               return; // Detenemos guardado
           }
       }
 
-      // Si pasa todo, guardamos y salimos
-      await performSave(true);
+      // Si pasa todo, guardamos y (si se pidió) salimos
+      await performSave(shouldExit);
   };
 
   const handleBack = () => {
@@ -912,8 +912,8 @@ const EditorPage = ({ user }: { user: User }) => {
   };
 
   const handleManualSave = () => {
-      // Guardado manual simple (sin validaciones bloqueantes de salida, solo feedback visual)
-      performSave(false); 
+      // Guardado manual: valida pero NO sale (shouldExit = false)
+      checkValidationAndSave(false);
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -995,7 +995,7 @@ const EditorPage = ({ user }: { user: User }) => {
   const totalQ = test.questions.length;
 
   return (
-    <div className="pb-32 animate-in fade-in zoom-in-95 max-w-2xl mx-auto">
+    <div className="pb-32 animate-in fade-in zoom-in-95 max-w-2xl mx-auto px-3">
        <JumpToQuestionModal 
            isOpen={showJumpModal} 
            totalQuestions={totalQ} 
@@ -1015,7 +1015,7 @@ const EditorPage = ({ user }: { user: User }) => {
             message="Tienes cambios pendientes. ¿Qué deseas hacer?"
             confirmText="Guardar y Salir"
             confirmVariant="success"
-            onConfirm={() => { setUnsavedModalOpen(false); checkValidationAndSave(); }}
+            onConfirm={() => { setUnsavedModalOpen(false); checkValidationAndSave(true); }}
             discardText="Salir sin guardar"
             discardVariant="danger"
             onDiscard={() => { setUnsavedModalOpen(false); navigate('/'); }}
@@ -1038,8 +1038,9 @@ const EditorPage = ({ user }: { user: User }) => {
             discardText="No, guardar así"
             discardVariant="secondary"
             onDiscard={() => {
+                const exiting = validationModal.isExiting;
                 setValidationModal({ ...validationModal, type: null });
-                checkValidationAndSave(true, false); // Saltar chequeo de vacías
+                checkValidationAndSave(exiting, true, false); // Saltar chequeo de vacías, pasar exiting
             }}
             onCancel={() => {}} // No hay cancel, es flujo bloqueante
        />
@@ -1060,8 +1061,9 @@ const EditorPage = ({ user }: { user: User }) => {
             discardText="No, guardar así"
             discardVariant="secondary"
             onDiscard={() => {
+                const exiting = validationModal.isExiting;
                 setValidationModal({ ...validationModal, type: null });
-                checkValidationAndSave(true, true); // Saltar ambos chequeos
+                checkValidationAndSave(exiting, true, true); // Saltar ambos chequeos, pasar exiting
             }}
             onCancel={() => {}} 
        />
