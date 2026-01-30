@@ -14,7 +14,8 @@ export const Button: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement> & { 
     primary: "bg-brand-600 text-white hover:bg-brand-700 border border-transparent",
     secondary: "bg-white text-slate-700 border-2 border-slate-200 hover:border-brand-500 hover:text-brand-600 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 dark:hover:border-brand-500",
     danger: "bg-red-50 text-red-600 border border-red-100 hover:bg-red-100 dark:bg-red-900/20 dark:border-red-900/50 dark:text-red-400",
-    success: "bg-green-600 text-white hover:bg-green-700 border border-transparent shadow-md shadow-green-500/20",
+    // Modificado: Verde clarito de fondo, texto intenso (estilo danger pero en verde)
+    success: "bg-green-50 text-green-600 border border-green-100 hover:bg-green-100 dark:bg-green-900/20 dark:border-green-900/50 dark:text-green-400",
     ghost: "text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 border border-transparent"
   };
 

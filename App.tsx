@@ -759,6 +759,14 @@ const EditorPage = ({ user }: { user: User }) => {
   const [progress, setProgress] = useState({ msg: '', percent: 0 });
   const [showSavedOverlay, setShowSavedOverlay] = useState(false);
   
+  // Refs para el event listener de navegación
+  const testRef = useRef<Test | null>(null);
+  const initialJsonRef = useRef('');
+
+  // Sincronizar refs
+  useEffect(() => { testRef.current = test; }, [test]);
+  useEffect(() => { initialJsonRef.current = initialTestJson; }, [initialTestJson]);
+
   // States para Modales
   const [errorModal, setErrorModal] = useState<{isOpen: boolean, msg: string}>({isOpen: false, msg: ''});
   const [unsavedModalOpen, setUnsavedModalOpen] = useState(false);
@@ -773,6 +781,36 @@ const EditorPage = ({ user }: { user: User }) => {
   const [currentIndex, setCurrentIndex] = useState(0); 
   const [showJumpModal, setShowJumpModal] = useState(false); 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // MANEJO DE BOTÓN ATRÁS DEL NAVEGADOR
+  useEffect(() => {
+    // Empujar un estado al historial para "atrapar" el evento back
+    const pushState = () => {
+         window.history.pushState({ editing: true }, '', window.location.href);
+    };
+    pushState();
+
+    const handlePopState = (e: PopStateEvent) => {
+        // Verificar cambios usando refs para no depender del render
+        const currentTest = testRef.current;
+        const initialJson = initialJsonRef.current;
+        
+        const hasChanges = currentTest && JSON.stringify(currentTest) !== initialJson;
+
+        if (hasChanges) {
+            // Si hay cambios, volvemos a empujar el estado para cancelar la navegación
+            // y mostramos el modal que ya tiene la lógica de validación
+            pushState();
+            setUnsavedModalOpen(true);
+        } else {
+            // Si no hay cambios, permitimos la navegación (o forzamos ir a home para asegurar)
+            navigate('/');
+        }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   useEffect(() => {
     if (!id) return;
