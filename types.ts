@@ -64,3 +64,14 @@ export interface DialogChoice {
   text: string;
   effect: 'empathy' | 'efficiency';
 }
+
+export interface ProjectileData {
+    id: string;
+    startX: number;
+    startY: number;
+    targetX: number;
+    targetY: number;
+    color: string;
+    icon?: string;
+    startTime: number;
+}

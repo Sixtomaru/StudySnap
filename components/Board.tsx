@@ -1,6 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { TileData, GRID_WIDTH, GRID_HEIGHT, FloatingText } from '../types';
-import { ProjectileData } from '../App';
+import { TileData, GRID_WIDTH, GRID_HEIGHT, FloatingText, ProjectileData } from '../types';
 
 interface BoardProps {
   board: TileData[];
@@ -41,6 +40,15 @@ const CANVAS_THEME: Record<string, { fill: string, border: string }> = {
     'Volador': { fill: 'rgba(186, 230, 253, 0.4)', border: '#7dd3fc' },  
     'Psíquico': { fill: 'rgba(251, 207, 232, 0.4)', border: '#f9a8d4' }, 
     'Hada': { fill: 'rgba(254, 205, 211, 0.4)', border: '#fda4af' }      
+};
+
+// Polyfill for round rect drawing
+const drawRoundedRect = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) => {
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
 };
 
 const Board: React.FC<BoardProps> = ({ board, selectedTileId, onMove, isProcessing, floatingTexts, shake, projectiles = [] }) => {
@@ -140,7 +148,7 @@ const Board: React.FC<BoardProps> = ({ board, selectedTileId, onMove, isProcessi
                   
                   ctx.fillStyle = 'rgba(30, 41, 59, 0.4)'; // slate-800
                   ctx.beginPath();
-                  ctx.roundRect(px + 4, py + 4, pSize - 8, pSize - 8, 12);
+                  drawRoundedRect(ctx, px + 4, py + 4, pSize - 8, pSize - 8, 12);
                   ctx.fill();
                   ctx.lineWidth = 2;
                   ctx.strokeStyle = 'rgba(51, 65, 85, 0.2)';
@@ -215,13 +223,13 @@ const Board: React.FC<BoardProps> = ({ board, selectedTileId, onMove, isProcessi
                       // Lifted shadow
                       ctx.fillStyle = 'rgba(0,0,0,0.3)';
                       ctx.beginPath();
-                      ctx.roundRect(xPos + 5, yPos + 15, innerSize, innerSize, cornerRadius);
+                      drawRoundedRect(ctx, xPos + 5, yPos + 15, innerSize, innerSize, cornerRadius);
                       ctx.fill();
                   } else {
                       // Grounded shadow
                       ctx.fillStyle = 'rgba(0,0,0,0.15)';
                       ctx.beginPath();
-                      ctx.roundRect(xPos, yPos + 4, innerSize, innerSize, cornerRadius);
+                      drawRoundedRect(ctx, xPos, yPos + 4, innerSize, innerSize, cornerRadius);
                       ctx.fill();
                   }
               }
@@ -229,7 +237,7 @@ const Board: React.FC<BoardProps> = ({ board, selectedTileId, onMove, isProcessi
               // Main Box Fill
               ctx.fillStyle = fillColor;
               ctx.beginPath();
-              ctx.roundRect(xPos, yPos, innerSize, innerSize, cornerRadius);
+              drawRoundedRect(ctx, xPos, yPos, innerSize, innerSize, cornerRadius);
               ctx.fill();
               
               // Border
@@ -263,7 +271,7 @@ const Board: React.FC<BoardProps> = ({ board, selectedTileId, onMove, isProcessi
                    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
                    ctx.lineWidth = 2;
                    ctx.beginPath();
-                   ctx.roundRect(xPos + 4, yPos + 4, innerSize - 8, innerSize - 8, 8);
+                   drawRoundedRect(ctx, xPos + 4, yPos + 4, innerSize - 8, innerSize - 8, 8);
                    ctx.stroke();
 
                    ctx.font = `${innerSize * 0.5}px Arial`;
@@ -303,7 +311,7 @@ const Board: React.FC<BoardProps> = ({ board, selectedTileId, onMove, isProcessi
                   if (tile.status === 'ice') {
                       ctx.fillStyle = 'rgba(165, 243, 252, 0.3)';
                       ctx.beginPath();
-                      ctx.roundRect(xPos, yPos, innerSize, innerSize, cornerRadius);
+                      drawRoundedRect(ctx, xPos, yPos, innerSize, innerSize, cornerRadius);
                       ctx.fill();
                       
                       ctx.strokeStyle = 'rgba(34, 211, 238, 0.8)';

@@ -5,23 +5,11 @@ import BossCard from './components/BossCard';
 import TeamSelector from './components/TeamSelector';
 import MainMenu from './components/MainMenu';
 import CaptureModal from './components/CaptureModal';
-import { GameState, TileData, Boss, FloatingText, ElementType, SkillType, GRID_WIDTH, GRID_HEIGHT } from './types';
+import { GameState, TileData, Boss, FloatingText, ElementType, SkillType, GRID_WIDTH, GRID_HEIGHT, ProjectileData } from './types';
 import { createBoard, findMatches, applyGravity, applyInterference, MatchGroup, hasPossibleMoves } from './utils/gameLogic';
 import { MONSTER_DB, INITIAL_MOVES, MOVES_PER_LEVEL, TYPE_CHART, getLevelBackground, SECRET_BOSS, TYPE_PROJECTILE_ICONS } from './constants';
 import { soundManager } from './utils/sound';
 import { Skull, Zap, RotateCcw, X, LogOut, CheckCircle2 } from 'lucide-react';
-
-// Define ProjectileData locally or import if moved to types
-export interface ProjectileData {
-    id: string;
-    startX: number;
-    startY: number;
-    targetX: number;
-    targetY: number;
-    color: string;
-    icon?: string;
-    startTime: number; // Added to track animation in canvas
-}
 
 const App: React.FC = () => {
   // --- Game State ---
