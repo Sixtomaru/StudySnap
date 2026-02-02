@@ -1,7 +1,5 @@
 {
-  "name": "StudySnap",
-  "description": "Scan tests, save questions, and study anywhere using AI.",
-  "requestFramePermissions": [
-    "camera"
-  ]
+  "name": "[COPIA] de Monstemojis (pruebas)",
+  "description": "Juego shuffleriano de emojis",
+  "requestFramePermissions": []
 }

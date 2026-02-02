@@ -1,86 +1,79 @@
 <!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>StudySnap</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class', // Habilitar modo oscuro manual
-      theme: {
-        extend: {
-          colors: {
-            brand: {
-              50: '#f0f4ff',
-              100: '#e0e7ff',
-              200: '#c7d2fe',
-              300: '#a5b4fc',
-              500: '#6366f1',
-              600: '#4f46e5',
-              700: '#4338ca',
-            },
-            pastel: {
-              bg: '#eef2f6',
-              card: '#ffffff',
-              input: '#f8fafc'
-            },
-            dark: {
-              bg: '#0f172a',
-              card: '#1e293b',
-              border: '#334155'
-            }
-          }
-        }
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Emoji Shuffle Battle</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@300;400;500;600;700&display=swap');
+      body {
+        font-family: 'Fredoka', sans-serif;
       }
-    }
-  </script>
-<script type="importmap">
+      
+      /* --- OPTIMIZED GLOBAL ANIMATIONS --- */
+      
+      /* Use translate3d to force hardware acceleration on mobile */
+      @keyframes drop-in {
+        0% { transform: translate3d(var(--tx), -150%, 0); opacity: 0; }
+        60% { transform: translate3d(var(--tx), var(--ty), 0); opacity: 1; }
+        80% { transform: translate3d(var(--tx), calc(var(--ty) - 5%), 0); }
+        100% { transform: translate3d(var(--tx), var(--ty), 0); }
+      }
+
+      @keyframes zoom-pop {
+        0% { transform: translate3d(var(--tx), var(--ty), 0) scale(0); opacity: 0; }
+        50% { transform: translate3d(var(--tx), var(--ty), 0) scale(1.2); opacity: 1; }
+        100% { transform: translate3d(var(--tx), var(--ty), 0) scale(1); }
+      }
+
+      @keyframes implode {
+        0% { transform: scale(1); filter: brightness(1.5); }
+        50% { transform: scale(1.2); filter: brightness(2); background-color: white; }
+        100% { transform: scale(0); opacity: 0; }
+      }
+
+      @keyframes bounce {
+        0% { transform: scale(0.8); opacity: 0.5; }
+        100% { transform: scale(1); opacity: 1; }
+      }
+
+      .tile-bounce {
+        animation: bounce 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      }
+      
+      .damage-float {
+        animation: floatUp 1s ease-out forwards;
+      }
+      
+      @keyframes floatUp {
+        0% { transform: translateY(0); opacity: 1; }
+        100% { transform: translateY(-50px); opacity: 0; }
+      }
+
+      /* Classes to trigger animations */
+      .animate-drop-in { animation: drop-in 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94); }
+      .animate-zoom-pop { animation: zoom-pop 0.4s ease-out forwards; }
+      .animate-implode { animation: implode 0.4s ease-in forwards; }
+
+    </style>
+  <script type="importmap">
 {
   "imports": {
-    "react/": "https://esm.sh/react@^19.2.3/",
-    "react": "https://esm.sh/react@^19.2.3",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-    "@google/genai": "https://esm.sh/@google/genai@^1.38.0",
-    "uuid": "https://esm.sh/uuid@^13.0.0",
-    "lucide-react": "https://esm.sh/lucide-react@^0.563.0",
-    "react-router-dom": "https://esm.sh/react-router-dom@^7.13.0",
-    "firebase/app": "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js",
-    "firebase/firestore": "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js",
-    "firebase/auth": "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js",
-    "firebase/": "https://esm.sh/firebase@^12.8.0/",
-    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
-    "vite": "https://esm.sh/vite@^7.3.1",
-    "pdfjs-dist": "https://esm.sh/pdfjs-dist@4.0.379",
-    "tesseract.js": "https://esm.sh/tesseract.js@5.1.0"
+    "lucide-react": "https://esm.sh/lucide-react@0.460.0?external=react",
+    "@google/genai": "https://esm.sh/@google/genai",
+    "react": "https://esm.sh/react@18.2.0",
+    "react/": "https://esm.sh/react@18.2.0/",
+    "react-dom": "https://esm.sh/react-dom@18.2.0",
+    "react-dom/": "https://esm.sh/react-dom@18.2.0/",
+    "framer-motion": "https://esm.sh/framer-motion@11.0.8?external=react,react-dom"
   }
 }
 </script>
-<style>
-  /* Deshabilitar selección de texto por defecto */
-  body {
-    user-select: none;
-    -webkit-user-select: none;
-  }
-  /* Habilitar selección solo en inputs y textareas */
-  input, textarea {
-    user-select: text;
-    -webkit-user-select: text;
-  }
-  
-  /* Ocultar Scrollbar GLOBALMENTE */
-  * {
-      -ms-overflow-style: none; /* IE and Edge */
-      scrollbar-width: none; /* Firefox */
-  }
-  *::-webkit-scrollbar {
-      display: none; /* Chrome, Safari and Opera */
-  }
-</style>
 <link rel="stylesheet" href="/index.css">
 </head>
-<body class="bg-gradient-to-br from-blue-100 via-indigo-100 to-purple-100 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800 text-slate-800 dark:text-slate-100 min-h-screen selection:bg-brand-200 transition-colors duration-300">
-  <div id="root"></div>
-<script type="module" src="/index.tsx"></script>
-</body>
+  <body class="bg-slate-900 text-slate-100 overflow-hidden select-none touch-none">
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
 </html>

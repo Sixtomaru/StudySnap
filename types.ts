@@ -1,53 +1,66 @@
-export interface Option {
+
+export type ElementType = 'Fuego' | 'Agua' | 'Planta' | 'Eléctrico' | 'Tierra' | 'Roca' | 'Hielo' | 'Acero' | 'Fantasma' | 'Dragón' | 'Normal' | 'Bicho' | 'Volador' | 'Psíquico' | 'Hada';
+export type TileStatus = 'normal' | 'rock' | 'steel' | 'ice';
+
+export interface TileData {
   id: string;
+  monsterId: string;
+  type: ElementType;
+  emoji: string;
+  image?: string; // New: Support for images
+  isMatched: boolean;
+  x: number;
+  y: number;
+  status: TileStatus;
+  statusLife?: number; 
+}
+
+export type SkillType = 'damage_single' | 'damage_aoe' | 'heal_turns' | 'clear_rocks' | 'clear_ice' | 'clear_steel' | 'convert_type' | 'nuke' | 'clear_random' | 'clear_self';
+
+export interface Boss {
+  id: string;
+  name: string;
+  emoji: string;
+  image?: string; // New: Support for images
+  description: string;
+  maxHp: number;
+  currentHp: number;
+  type: ElementType;
+  skillType: SkillType;
+  skillName: string;
+  skillDescription: string;
+  skillCost: number; 
+  captured?: boolean;
+}
+
+export interface FloatingText {
+  id: string;
+  x: number;
+  y: number;
+  text: string;
+  color: string;
+  scale?: number;
+}
+
+export interface GameState {
+  board: TileData[];
+  movesLeft: number;
+  currentLevel: number; 
+  status: 'menu' | 'team_select' | 'playing' | 'capture' | 'captured_info' | 'victory' | 'gameover' | 'gallery';
+  selectedTileId: string | null;
+  combo: number;
+  skillCharges: Record<string, number>; 
+}
+
+export const GRID_WIDTH = 6;
+export const GRID_HEIGHT = 6;
+
+export interface DialogLine {
+  speaker: string;
   text: string;
 }
 
-export interface Question {
-  id: string;
+export interface DialogChoice {
   text: string;
-  options: Option[];
-  correctOptionId: string; // The ID of the correct option
-}
-
-export interface PDFProgress {
-  totalPages: number;
-  lastProcessedPage: number;
-}
-
-export interface Test {
-  id: string;
-  userId: string; // ID del usuario propietario
-  title: string;
-  createdAt: number;
-  questions: Question[];
-  pdfMetadata?: PDFProgress; // Guardamos el progreso aquí
-}
-
-export interface TestResult {
-  id: string;
-  userId: string; // ID del usuario que hizo el test
-  testId: string;
-  testTitle: string;
-  date: number;
-  score: number;
-  totalQuestions: number;
-  details: AnswerDetail[];
-}
-
-export interface AnswerDetail {
-  questionId: string;
-  questionText: string;
-  selectedOptionId: string;
-  correctOptionId: string;
-  options: Option[];
-  isCorrect: boolean;
-}
-
-export enum AppRoute {
-  HOME = 'HOME',
-  EDITOR = 'EDITOR',
-  QUIZ = 'QUIZ',
-  HISTORY = 'HISTORY',
-  RESULT_DETAILS = 'RESULT_DETAILS'
+  effect: 'empathy' | 'efficiency';
 }
