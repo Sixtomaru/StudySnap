@@ -1,53 +1,40 @@
-export interface Option {
-  id: string;
-  text: string;
+export interface DailyForecast {
+  date: string; // YYYY-MM-DD
+  dayName: string; // Lunes, Martes...
+  avgMaxTemp: number;
+  avgMinTemp: number;
+  avgWindSpeed: number; // km/h
+  avgRainProb: number; // %
+  conditionText: string; // "Soleado", "Nublado", etc.
+  // Updated list based on user request
+  iconCode: 'sunny' | 'partly-cloudy' | 'sun-rain' | 'cloudy' | 'rain' | 'storm' | 'snow' | 'fog';
 }
 
-export interface Question {
-  id: string;
-  text: string;
-  options: Option[];
-  correctOptionId: string; // The ID of the correct option
+export interface HourlyForecast {
+  time: string; // "14:00"
+  dayLabel: string; // "Lunes", "Martes" (Used to detect day change)
+  temp: number;
+  precipProb: number;
+  conditionText: string;
+  iconCode: DailyForecast['iconCode'];
 }
 
-export interface PDFProgress {
-  totalPages: number;
-  lastProcessedPage: number;
-}
-
-export interface Test {
-  id: string;
-  userId: string; // ID del usuario propietario
+export interface GroundingSource {
   title: string;
-  createdAt: number;
-  questions: Question[];
-  pdfMetadata?: PDFProgress; // Guardamos el progreso aquí
+  uri: string;
 }
 
-export interface TestResult {
-  id: string;
-  userId: string; // ID del usuario que hizo el test
-  testId: string;
-  testTitle: string;
-  date: number;
-  score: number;
-  totalQuestions: number;
-  details: AnswerDetail[];
+export interface WeatherData {
+  city: string;
+  daily: DailyForecast[];
+  hourly: HourlyForecast[];
+  sources: GroundingSource[];
+  analysisTimestamp: string;
 }
 
-export interface AnswerDetail {
-  questionId: string;
-  questionText: string;
-  selectedOptionId: string;
-  correctOptionId: string;
-  options: Option[];
-  isCorrect: boolean;
-}
-
-export enum AppRoute {
-  HOME = 'HOME',
-  EDITOR = 'EDITOR',
-  QUIZ = 'QUIZ',
-  HISTORY = 'HISTORY',
-  RESULT_DETAILS = 'RESULT_DETAILS'
+export enum LoadingState {
+  IDLE = 'IDLE',
+  LOADING = 'LOADING',
+  SUCCESS = 'SUCCESS',
+  ERROR = 'ERROR'
 }
