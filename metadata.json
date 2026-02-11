@@ -1,5 +1,7 @@
 {
-  "name": "MetaWeather - Promedio Meteorológico",
-  "description": "Una aplicación meteorológica avanzada que utiliza IA para buscar y promediar pronósticos de múltiples fuentes líderes (AEMET, Weather.com, Windy, etc.) para ofrecer el dato más preciso posible.",
-  "requestFramePermissions": []
+  "name": "StudySnap",
+  "description": "Scan tests, save questions, and study anywhere using AI.",
+  "requestFramePermissions": [
+    "camera"
+  ]
 }
